@@ -11,6 +11,7 @@ from xml.etree import ElementTree as ET
 from bs4 import BeautifulSoup
 from .models import Article
 from .source_registry import SourceSpec
+from .social_policy import reject_public_post
 
 TRACKING = frozenset({'fbclid','gclid','yclid','mc_cid','mc_eid'})
 ATOM_NS = '{http://www.w3.org/2005/Atom}'
@@ -81,15 +82,28 @@ def parse_feed(source: SourceSpec, payload: bytes, fetched_at: datetime) -> list
     if source.kind == 'public_telegram':
         result=[]
         soup=BeautifulSoup(payload,'html.parser')
+        # Never accept a post attributed to a different channel in an
+        # unexpected HTML response, e.g. an embedded forwarded message.
+        parsed_source=urlsplit(source.url)
+        path=parsed_source.path.rstrip('/').split('/')
+        expected=(path[-1].casefold()
+                  if parsed_source.hostname in ('t.me','www.t.me')
+                  and len(path)>=3 and path[1]=='s' else '')
         for card in soup.select('.tgme_widget_message[data-post]')[:180]:
             identifier=card.get('data-post','')
             node=card.select_one('.tgme_widget_message_text')
             t=card.select_one('time[datetime]')
             if not re.fullmatch(r'[A-Za-z0-9_]{4,32}/\d{1,18}',identifier) or not node or not t:
                 continue
+            if expected and identifier.split('/')[0].casefold()!=expected:
+                continue
             published=parse_date(t.get('datetime',''),atom=True)
             content=clean_text(node.get_text(' ',strip=True),900)
             if not content:
+                continue
+            # Preserve existing established channels' behavior. Only newly
+            # curated channels have topic hints and use the spam/noise gate.
+            if source.topics and reject_public_post(content):
                 continue
             result.append(make_article(source,'https://t.me/'+identifier,content[:210],content,published,fetched_at))
         return result

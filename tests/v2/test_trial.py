@@ -131,6 +131,7 @@ class StandaloneRunnerTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(report["sources"]),2)
             rbc=next(x for x in report["sources"] if x["source_id"]=="rbc")
             self.assertEqual(rbc["state"],"ok")
+            self.assertEqual(rbc["article_count"],0)
             gazeta=next(x for x in report["sources"] if x["source_id"]=="gazeta")
             self.assertEqual(gazeta["state"],"error")
             self.assertEqual(gazeta["last_error"],"HTTP_404")
