@@ -97,8 +97,6 @@ def _product_marker(article: Article) -> str:
 
 
 def match_articles(left: Article,right: Article) -> MatchResult:
-    if left.article_id == right.article_id or left.canonical_url==right.canonical_url:
-        return MatchResult('same',('identical_publication',))
     a,b=stage(left.title),stage(right.title)
     if a != b and (a or b):
         return MatchResult('different',('different_stage',))
@@ -115,6 +113,10 @@ def match_articles(left: Article,right: Article) -> MatchResult:
         pa,pb=_product_marker(left),_product_marker(right)
         if pa and pb and pa!=pb:
             return MatchResult('different',('different_affected_product',))
+    # A publisher may re-use a URL after changing a bill's stage or outcome.
+    # Conflict guards must execute before identity checks.
+    if left.article_id == right.article_id or left.canonical_url==right.canonical_url:
+        return MatchResult('same',('identical_publication',))
     if left.published_at and right.published_at:
         if abs((left.published_at-right.published_at).total_seconds())>72*3600:
             return MatchResult('possible',('distant_publication_dates',))
