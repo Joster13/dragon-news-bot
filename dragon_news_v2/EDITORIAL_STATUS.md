@@ -12,7 +12,7 @@ Stage 2 is currently **offline-only**. This branch must not be merged or deploye
 
 ## Boundaries and release blockers
 
-1. The existing v2 hourly collector **does not yet call the editorial pipeline**. Integration and persistence of audit decisions and daily shadow snapshots must be added and tested before a 7-day shadow run.
+1. The opt-in v2 hourly collector now connects to the editorial pipeline and saves daily 09:00 Moscow shadow snapshots, evidence states, event-article links and decision reasons in the separate v2 SQLite database. An INCOMPLETE shadow snapshot can be refreshed before 12:00; no Telegram message is sent. This is covered by offline regression tests, **not** a completed 7-day live shadow trial.
 2. The 60+ real, manually labelled, source-linked test corpus required by the approved plan **has not been collected or measured**. Existing regression titles and synthetic tests are not a substitute for real-world precision and recall. Target: >=95% topical precision, >=85% recall.
 3. The current origin_map must come from explicit provenance analysis; unknown origin is conservatively treated as unverified. Do not derive independent roots merely from different publisher names.
 4. CI checks are offline: they do not verify that each RSS/Telegram site responds from BotHost.
