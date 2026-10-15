@@ -87,6 +87,26 @@ def _legislative_stage(headline: str) -> str:
     return ""
 
 
+def _bill_id(item) -> set[str]:
+    """Bill numbers in title/description can identify different legislative acts."""
+    content = item.title + " " + (item.summary or "")
+    return set(re.findall(r"(?<!\d)\d{5,}-\d{1,3}(?!\d)", content))
+
+
+def _legislative_topic(item) -> str:
+    """A small domain map for cases where two outlets use different species.
+
+    This map only applies to one reading-stage and public funding context;
+    it is not a generic claim that all fisheries bills concern one event.
+    """
+    content = (item.title + " " + (item.summary or "")).lower()
+    if re.search(r"рыб|лосос|форел|аквакультур|рыбовод", content):
+        if re.search(r"госзадан|государственн[а-я ]+задан|"
+                     r"подведомственн[а-я ]+росрыболов", content):
+            return "fisheries-state-breeding"
+    return ""
+
+
 def same_event(a, b) -> bool:
     """Conservative match of separate headlines describing the SAME event.
 
@@ -97,6 +117,14 @@ def same_event(a, b) -> bool:
     stage_a, stage_b = _legislative_stage(a.title), _legislative_stage(b.title)
     if stage_a and stage_b and stage_a != stage_b:
         return False
+    bills_a, bills_b = _bill_id(a), _bill_id(b)
+    if bills_a and bills_b and bills_a.isdisjoint(bills_b):
+        return False
+    if (a.topic == "Законы и правила"
+            and stage_a and stage_a == stage_b
+            and _legislative_topic(a) == _legislative_topic(b)
+            and _legislative_topic(a)):
+        return True
     # Do not merge a later rejection with an earlier approval.
     action_a, action_b = _actions(a.title), _actions(b.title)
     if action_a and action_b and action_a != action_b:
