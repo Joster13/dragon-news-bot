@@ -84,12 +84,12 @@ VPN = re.compile(
 # Financial classification must not be triggered solely by "рублей" in
 # procurement figures or "ЦБ" commenting on agriculture.
 FINANCE = re.compile(
-    r"\\bбанк(?:и|ов|ах|ам|а|е|ом|овский|овские|овскую)?\\b|"
-    r"банковск|центробанк|\\bЦБ\\b|"
+    r"\bбанк(?:и|ов|ах|ам|а|е|ом|овский|овские|овскую)?\b|"
+    r"банковск|центробанк|\bЦБ\b|"
     r"ключев[а-я ]+ставк|процентн[а-я ]+ставк|"
     r"вклад[а-я]*|депозит[а-я]*|кредит[а-я]*|ипотек[а-я]*|"
     r"инфляц[а-я]*|бирж[а-я]*|криптовалют|"
-    r"биткоин|\\bBTC\\b|\\bUSDT\\b|\\bP2P\\b|"
+    r"биткоин|\bBTC\b|\bUSDT\b|\bP2P\b|"
     r"денежн[а-я ]+перевод|банковск[а-я ]+перевод|"
     r"финансов[а-я]*|валютн[а-я]*|курс[а-я ]+рубл",
     re.I,
@@ -186,7 +186,7 @@ def category(title: str, description: str = "", forced: str = "") -> str | None:
         return "Законы и правила"
     if FINANCE.search(value):
         # The central bank can also report on agricultural production.
-        central_only = re.search(r"\\bЦБ\\b|центробанк", value, re.I)
+        central_only = re.search(r"\bЦБ\b|центробанк", value, re.I)
         if not central_only or FINANCE_SUBJECT.search(value):
             return "Финансы и крипта"
     if CYBER.search(value):
