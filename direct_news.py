@@ -40,6 +40,8 @@ FEEDS = (
     Feed("Лента.ру", "https://lenta.ru/rss/"),
     Feed("Газета.Ru", "https://www.gazeta.ru/export/rss/lenta.xml"),
     Feed("Хабр", "https://habr.com/ru/rss/news/?fl=ru", "IT, облака и AI"),
+    Feed("BBC Russian", "https://feeds.bbci.co.uk/russian/rss.xml"),
+    Feed("Deutsche Welle", "https://rss.dw.com/xml/rss-ru-all"),
     Feed("GOROD48", "https://t.me/s/gorod48ru", "Липецк и Липецкая область"),
 )
 
@@ -289,7 +291,10 @@ def rss_items(feed: Feed, payload: bytes, now: datetime, window_h: int = 30) -> 
                 desc = desc[:650]
             viewpoint = ""
             if topic == "СВО — позиции сторон":
-                viewpoint = "Российское издание" if feed.name not in ("Хабр",) else ""
+                viewpoint = {
+                    "BBC Russian": "Британское издание",
+                    "Deutsche Welle": "Немецкое издание",
+                }.get(feed.name, "Российское издание")
             output.append(NewsItem(topic, title[:250], desc, url, feed.name, dt, viewpoint))
         except (ValueError, OverflowError, TypeError):
             continue
