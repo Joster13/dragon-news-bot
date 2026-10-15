@@ -40,6 +40,16 @@ class ShadowWiringTests(unittest.IsolatedAsyncioTestCase):
     async def _exit_immediately(self,client,db,stop):
         stop.set()
 
+    def test_main_integration_only_by_flag(self):
+        import inspect
+        import main
+        run = inspect.getsource(main.NewsBot.run)
+        self.assertIn('if shadow_enabled():', run)
+        self.assertEqual(inspect.getsource(main.NewsBot.listen).count('getUpdates'), 1)
+        self.assertIn('self.listen(), self.scheduler()', run)
+        for old in ('"start"', '"today"', '"status"', '"export"'):
+            self.assertIn(old, run)
+
     def test_single_polling_consumer(self):
         import inspect
         import dragon_news_v2.integration as module
