@@ -51,7 +51,11 @@ class ShadowDatabaseTests(unittest.TestCase):
             self.assertFalse(upsert_article(db, article()))
             db.close()
             self.assertEqual(legacy_path.read_bytes(), original_bytes)
-            self.assertNotIn("seen", [r[0] for r in sqlite3.connect(shadow_path).execute("SELECT name FROM sqlite_master")])
+            inspection = sqlite3.connect(shadow_path)
+            try:
+                self.assertNotIn("seen", [r[0] for r in inspection.execute("SELECT name FROM sqlite_master")])
+            finally:
+                inspection.close()
 
     def test_rejects_existing_production_database_path(self):
         with TemporaryDirectory() as folder:
