@@ -170,6 +170,12 @@ def editorial_score(item) -> int:
                  r"где\s+отдохнуть|раскритиковал\s+заявлени", title):
         return -2
     score = 2
+    # Regional-only social measures outside Lipetsk are low priority for a
+    # national-and-Lipetsk digest; relevant items can still appear elsewhere.
+    if item.topic == "Законы и правила":
+        if re.search(r"(?i)^в\s+[а-яё-]+\s+(?:области|крае|республике)\b", title):
+            if not re.search(r"липецк|елец|воронеж", title):
+                score -= 3
     if item.summary and len(item.summary) >= 90:
         score += 1
     if re.search(r"принял|одобрил|утвердил|вступил|"
