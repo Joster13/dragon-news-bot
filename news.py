@@ -92,6 +92,18 @@ REGION_WORDS = ("липецк", "липецкой", "липецкая", "еле�
 IMPORTANT_LOCAL = ("отключ", "водоснаб", "отоплен", "тариф", "дорог", "перекры", "свет", "школ", "поликлин", "льгот", "сирен", "опасност", "бпла", "аэропорт", "электроэнерг", "автобус", "бюджет", "завод", "интернет", "связь", "производств")
 
 
+TOPIC_TERMS = {
+    "Интернет и VPN": ("роскомнадзор", "ркн", "vpn", "vless", "wireguard", "telegram", "телеграм", "ютуб", "youtube", "доступ к", "доступа к", "блокировк", "мессенджер", "мобильн", "интернет", "провайдер", "dpi", "тспу"),
+    "Финансы и крипта": ("цб", "центробанк", "банк", "ставк", "вклад", "кредит", "ипотек", "usdt", "p2p", "крипт", "бирж", "рубл", "денежн", "инфляц", "финанс", "платеж", "перевод"),
+    "IT, облака и AI": ("openai", "chatgpt", "gemini", "claude", "нейросет", "искусственн", "ai ", " ии", "microsoft", "windows", "google", "яндекс", "yandex", "vk ", "вконтакте", "облак", "api", "сервер"),
+    "Инфраструктура и безопасность": ("cve-", "уязвим", "взлом", "кибератак", "утечк", "ransomware", "вымогател", "сервер", "cloud", "data center", "дата-центр", "nextcloud", "collabora", "linux", "эксплойт"),
+    "Игры на ПК": ("steam", "пк", " pc", "релиз", "вышла", "вышел", "игр", "game", "warfare", "локализац"),
+    "Законы и правила": ("госдум", "закон", "постановлен", "налог", "вычет", "льгот", "правительств", "штраф", "регулирован", "выплат"),
+}
+PROMOTIONAL = ("скидк", "распродаж", "акци", "промокод", "купить со скид", "топ-10", "лучшие смартфоны")
+LOCAL_SIGNALS = ("липецк", "липецкой област", "липецкая област", "елец", "гряз", "задонск", "данков", "лебедян", "усман", "чаплыгин", "добрин", "тербун", "хлевн")
+
+
 def is_significant(item: NewsItem) -> bool:
     title = item.title.rsplit(" - ", 1)[0].lower()
     if any(word in title for word in BAD_WORDS + SPECULATION):
@@ -99,12 +111,15 @@ def is_significant(item: NewsItem) -> bool:
     if item.topic == "Липецк и Липецкая область":
         if any(word in title for word in LOCAL_NOISE):
             return False
-        # Regional source alone does not make a nationwide report a local event.
-        if "в рф" in title or "в россии" in title:
-            return False
-        locality = any(word in title for word in REGION_WORDS)
-        meaningful_local = any(word in title for word in IMPORTANT_LOCAL)
-        return locality or meaningful_local
+        # No unrelated national headlines from a regional publisher.
+        return any(word in title for word in LOCAL_SIGNALS)
+    if item.topic in ("IT, облака и AI", "Игры на ПК") and any(w in title for w in PROMOTIONAL):
+        return False
+    if item.topic == "Россия — главное" and ("что будет" in title or "если " in title):
+        return False
+    terms = TOPIC_TERMS.get(item.topic)
+    if terms is not None and not any(w in title for w in terms):
+        return False
     return True
 
 
