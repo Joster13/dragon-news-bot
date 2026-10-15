@@ -26,12 +26,13 @@ async def main() -> None:
     parser=argparse.ArgumentParser(description="Standalone Dragon News v2 shadow test")
     view=parser.add_mutually_exclusive_group()
     view.add_argument("--status",action="store_true",help="Print counters read-only and exit")
+    view.add_argument("--sources",action="store_true",help="Print per-source health read-only")
     view.add_argument("--preview-date",help="Read source-linked items for a YYYY-MM-DD day")
     parser.add_argument("--db",default="/app/data/dragon_news_shadow.sqlite3",
                         help="Dedicated shadow SQLite database file")
     args=parser.parse_args()
     path=require_shadow_only_path(args.db)
-    if args.status or args.preview_date:
+    if args.status or args.preview_date or args.sources:
         if not path.is_file():
             raise FileNotFoundError(f"Shadow database not found: {path}")
         uri="file:"+quote(str(path),safe="/")+ "?mode=ro"
@@ -40,6 +41,12 @@ async def main() -> None:
             db.execute("PRAGMA query_only=ON")
             if args.status:
                 report=trial_status(db)
+            elif args.sources:
+                rows=db.execute("SELECT source_id,kind,url,last_error,last_success_at FROM sources ORDER BY source_id").fetchall()
+                report={"sources":[{"source_id":row[0],"kind":row[1],"url":row[2],
+                                   "last_error":row[3],"last_success_at":row[4],
+                                   "state":"error" if row[3] else ("ok" if row[4] else "unknown")}
+                                   for row in rows]}
             else:
                 from datetime import date
                 day=date.fromisoformat(args.preview_date).isoformat()
