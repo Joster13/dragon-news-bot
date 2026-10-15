@@ -28,7 +28,7 @@ class ShadowWiringTests(unittest.IsolatedAsyncioTestCase):
             shadow=str(Path(folder)/'dragon_news_shadow.sqlite3')
             with patch.dict(os.environ,{'DB_PATH':str(Path(folder)/'dragon_news.sqlite3'), 'V2_DB_PATH':shadow}):
                 stop=asyncio.Event()
-                with patch('dragon_news_v2.integration.run_collector_loop',side_effect=self._exit_immediately):
+                with patch('dragon_news_v2.integration.run_shadow_workflow',side_effect=self._exit_immediately):
                     task=start_shadow_collector(object(),stop)
                     await asyncio.wait_for(task,timeout=2)
                 self.assertTrue(Path(shadow).exists())
@@ -39,6 +39,13 @@ class ShadowWiringTests(unittest.IsolatedAsyncioTestCase):
 
     async def _exit_immediately(self,client,db,stop):
         stop.set()
+
+    def test_integrates_daily_snapshot_runner_not_only_collector(self):
+        import inspect
+        import dragon_news_v2.integration as module
+        code=inspect.getsource(module.start_shadow_collector)
+        self.assertIn('run_shadow_workflow',code)
+        self.assertNotIn('run_collector_loop',code)
 
     def test_main_integration_only_by_flag(self):
         import inspect
