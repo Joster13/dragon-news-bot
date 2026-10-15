@@ -101,12 +101,12 @@ def _event_id(event_key: str) -> str:
     return hashlib.sha256(event_key.encode()).hexdigest()
 
 
-def _coverage_note(db: sqlite3.Connection, cutoff: datetime) -> tuple[str, bool]:
+def _coverage_note(db: sqlite3.Connection, cutoff: datetime, observed: datetime) -> tuple[str, bool]:
     start = (cutoff - timedelta(days=1)).isoformat()
     row = db.execute(
         "SELECT count(*),coalesce(max(sources_ok),0),coalesce(sum(failures),0) "
         "FROM collector_runs WHERE started_at >= ? AND started_at <= ?",
-        (start, cutoff.isoformat()),
+        (start, observed.isoformat()),
     ).fetchone()
     runs, best_sources, failures = row
     if not runs or not best_sources:
@@ -117,7 +117,8 @@ def _coverage_note(db: sqlite3.Connection, cutoff: datetime) -> tuple[str, bool]
 
 
 def build_shadow_digest(db: sqlite3.Connection, cutoff_at: datetime,
-                        max_items: int=28, observed_until: datetime | None=None) -> ShadowBuildResult:
+                        max_items: int=28, observed_until: datetime | None=None,
+                        retry_incomplete: bool=False) -> ShadowBuildResult:
     """Persist an immutable daily preview and editorial audit transactionally."""
     if cutoff_at.tzinfo is None:
         raise ValueError("Timezone-aware digest cutoff required")
@@ -127,7 +128,7 @@ def build_shadow_digest(db: sqlite3.Connection, cutoff_at: datetime,
     day = cutoff.date().isoformat()
     _ensure_schema(db)
     cached = _stored_result(db, day)
-    if cached:
+    if cached and not (retry_incomplete and cached.status == "INCOMPLETE"):
         return cached
 
     observed = observed_until or cutoff
@@ -141,7 +142,7 @@ def build_shadow_digest(db: sqlite3.Connection, cutoff_at: datetime,
     chosen = rank_events(decisions, max_items)
     snapshot = build_digest(cutoff.date(), chosen, groups, articles, cutoff)
     rich, plain = render_v2_digest(snapshot)
-    coverage_note, coverage_good = _coverage_note(db, cutoff)
+    coverage_note, coverage_good = _coverage_note(db, cutoff, observed)
     note = "; ".join(x for x in (snapshot.quality_note, coverage_note) if x)
     status = "READY" if coverage_good else "INCOMPLETE"
     digest_id = "shadow:" + day
@@ -172,9 +173,12 @@ def build_shadow_digest(db: sqlite3.Connection, cutoff_at: datetime,
             dec_id = hashlib.sha256((day + "\0" + g.event_key + "\0" +
                                      RULES_VERSION).encode()).hexdigest()
             db.execute(
-                """INSERT OR IGNORE INTO editorial_decisions(
+                """INSERT INTO editorial_decisions(
                    decision_id,event_id,rule_version,decision,score,reason_codes,checked_at)
-                   VALUES (?,?,?,?,?,?,?)""",
+                   VALUES (?,?,?,?,?,?,?)
+                   ON CONFLICT(decision_id) DO UPDATE SET decision=excluded.decision,
+                     score=excluded.score, reason_codes=excluded.reason_codes,
+                     checked_at=excluded.checked_at""",
                 (dec_id, ev_id, RULES_VERSION, "include" if decision.include else "exclude",
                  decision.score, json.dumps(decision.reason_codes, ensure_ascii=False),
                  cutoff.isoformat()),
@@ -182,10 +186,14 @@ def build_shadow_digest(db: sqlite3.Connection, cutoff_at: datetime,
 
         db.execute(
             """INSERT INTO digests(digest_id,day,cutoff_at,built_at,build_version,status,quality_note)
-               VALUES (?,?,?,?,?,?,?)""",
+               VALUES (?,?,?,?,?,?,?)
+               ON CONFLICT(day) DO UPDATE SET built_at=excluded.built_at,
+                 status=excluded.status,quality_note=excluded.quality_note""",
             (digest_id, day, cutoff.isoformat(), datetime.now(MOSCOW).isoformat(),
              RULES_VERSION, status, note),
         )
+        if cached:
+            db.execute("DELETE FROM digest_items WHERE digest_id=?", (digest_id,))
         for position, item in enumerate(snapshot.items, 1):
             eid = _event_id(item.event_key)
             db.execute(
@@ -200,7 +208,11 @@ def build_shadow_digest(db: sqlite3.Connection, cutoff_at: datetime,
         db.execute(
             """INSERT INTO shadow_snapshots(day,digest_id,content_hash,item_count,
                 rich_html,plain_chunks_json,quality_note,created_at)
-                VALUES (?,?,?,?,?,?,?,?)""",
+                VALUES (?,?,?,?,?,?,?,?)
+                ON CONFLICT(day) DO UPDATE SET content_hash=excluded.content_hash,
+                  item_count=excluded.item_count,rich_html=excluded.rich_html,
+                  plain_chunks_json=excluded.plain_chunks_json,
+                  quality_note=excluded.quality_note,created_at=excluded.created_at""",
             (day, digest_id, snapshot.content_hash, len(snapshot.items), rich,
              json.dumps(plain, ensure_ascii=False), note, datetime.now(MOSCOW).isoformat()),
         )
