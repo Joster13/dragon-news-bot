@@ -65,7 +65,7 @@ def _stored_result(db: sqlite3.Connection, day: str) -> ShadowBuildResult | None
            WHERE s.day=?""",
         (day,),
     ).fetchone()
-    return ShadowBuildResult(*row, False) if row else None
+    return ShadowBuildResult(row[0], row[1], row[2], row[3], False, row[4]) if row else None
 
 
 def _load_candidate_articles(db: sqlite3.Connection, cutoff: datetime) -> dict[str, Article]:
