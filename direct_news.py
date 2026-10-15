@@ -446,7 +446,7 @@ def select_balanced(items: list[NewsItem], max_items: int, seen: set[str], recen
                 continue
             if len(item.summary.strip()) < 90:
                 continue
-            if editorial_score(item) < max(5, minimum.get(topic, 2) + 1):
+            if editorial_score(item) < max(4, minimum.get(topic, 2) + 1):
                 continue
             pair = (topic, item.source)
             if source_counts[pair] >= 4:
