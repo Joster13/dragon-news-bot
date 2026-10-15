@@ -42,9 +42,15 @@ async def main() -> None:
             if args.status:
                 report=trial_status(db)
             elif args.sources:
-                rows=db.execute("SELECT source_id,kind,url,last_error,last_success_at FROM sources ORDER BY source_id").fetchall()
+                rows=db.execute(
+                    """SELECT s.source_id,s.kind,s.url,s.last_error,s.last_success_at,
+                              (SELECT COUNT(*) FROM articles a WHERE a.source_id=s.source_id),
+                              (SELECT MAX(a.fetched_at) FROM articles a WHERE a.source_id=s.source_id)
+                       FROM sources s ORDER BY s.source_id"""
+                ).fetchall()
                 report={"sources":[{"source_id":row[0],"kind":row[1],"url":row[2],
                                    "last_error":row[3],"last_success_at":row[4],
+                                   "article_count":row[5],"last_article_fetched_at":row[6],
                                    "state":"error" if row[3] else ("ok" if row[4] else "unknown")}
                                    for row in rows]}
             else:
