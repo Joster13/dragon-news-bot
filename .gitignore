@@ -1,0 +1,30 @@
+# Never publish real runtime secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets.json
+credentials.json
+service-account*.json
+
+# State and runtime files: may contain private chat data
+/data/
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+*.log
+logs/
+
+# Python, editors and local tooling
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+.idea/
+.vscode/
+.DS_Store
