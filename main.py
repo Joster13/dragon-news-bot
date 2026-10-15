@@ -52,6 +52,8 @@ class NewsBot:
                                        follow_redirects=True)
         self.lock = asyncio.Lock()
         self.last_attempt = None
+        self.preview_task = None
+        self.preview_busy_notice = False
 
     async def api(self, method: str, payload: dict | None = None, files: dict | None = None):
         target = f"https://api.telegram.org/bot{TOKEN}/{method}"
@@ -134,6 +136,36 @@ class NewsBot:
             log.info("Digest delivered for %s: %s items", day, len(fresh))
             return True
 
+    async def preview(self, chat_id: int):
+        """Run a bounded preview in the background so Telegram polling stays responsive."""
+        try:
+            async with self.lock:
+                now = datetime.now(TZ)
+                log.info("Preview started for %s", now.date())
+                fresh, sources_available = await asyncio.wait_for(
+                    collect_news(self.client, now, set(), min(MAX_ITEMS, 12)), timeout=58
+                )
+                if sources_available < 3:
+                    await self.text(chat_id, "Не удалось получить новости: доступны менее трёх RSS-лент. Попробуй позже.")
+                elif not fresh:
+                    await self.text(chat_id, "Свежих публикаций для предпросмотра пока нет.")
+                else:
+                    summaries = await asyncio.wait_for(explain_with_ai(self.client, fresh), timeout=32)
+                    await self.send_rich(chat_id, rich_html(fresh, now, summaries), fallback_html(fresh, now))
+                    log.info("Preview delivered: %s articles", len(fresh))
+        except asyncio.TimeoutError:
+            log.warning("Preview timed out")
+            await self.text(chat_id, "Сбор новостей превысил лимит времени. RSS или AI не отвечают. Попробуй /preview позже.")
+        except Exception:
+            log.exception("Preview failed")
+            try:
+                await self.text(chat_id, "Ошибка подготовки предпросмотра. Подробности в логах BotHost (без токенов).")
+            except Exception:
+                log.exception("Could not send preview failure notice")
+        finally:
+            self.preview_task = None
+            self.preview_busy_notice = False
+
     async def export(self, chat_id: int):
         last = self.db.last()
         if not last:
@@ -195,17 +227,13 @@ class NewsBot:
         elif command == "/today":
             await self.digest(manual=True)
         elif command == "/preview":
-            # Repeatable review; does not mark news as delivered.
-            async with self.lock:
-                now = datetime.now(TZ)
-                fresh, sources_available = await collect_news(self.client, now, set(), min(MAX_ITEMS, 12))
-                if sources_available < 3:
-                    await self.text(chat_id, "Новостные ленты временно недоступны. Попробуй /preview позже.")
-                elif not fresh:
-                    await self.text(chat_id, "Свежих публикаций для предпросмотра пока нет.")
-                else:
-                    summaries = await explain_with_ai(self.client, fresh)
-                    await self.send_rich(chat_id, rich_html(fresh, now, summaries), fallback_html(fresh, now))
+            if self.preview_task is not None and not self.preview_task.done():
+                if not self.preview_busy_notice:
+                    await self.text(chat_id, "Предпросмотр уже формируется. Дождись результата, повторные команды не нужны.")
+                    self.preview_busy_notice = True
+            else:
+                await self.text(chat_id, "Собираю свежие новости. Обычно это занимает до минуты; не отправляй команду повторно.")
+                self.preview_task = asyncio.create_task(self.preview(chat_id))
         elif command == "/export":
             await self.export(chat_id)
         elif command == "/rates":
