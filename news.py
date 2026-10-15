@@ -119,7 +119,7 @@ def is_significant(item: NewsItem) -> bool:
         if not any(word in title for word in LOCAL_SIGNALS):
             return False
         return any(word in title for word in IMPORTANT_LOCAL + (
-            "здравоохран", "больниц", "стройк", "ремонт", "транспорт",
+            "замен", "лифтов", "инфраструктур", "здравоохран", "больниц", "стройк", "ремонт", "транспорт",
             "зарплат", "занятост", "инвестиц", "рабочих мест", "социальн",
             "бюджет", "цены", "электроснабжен"
         ))
