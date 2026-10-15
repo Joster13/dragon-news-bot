@@ -1,6 +1,7 @@
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from types import SimpleNamespace
 
 
 class Storage:
@@ -11,6 +12,7 @@ class Storage:
         self.conn.execute("CREATE TABLE IF NOT EXISTS seen (key TEXT PRIMARY KEY, timestamp TEXT NOT NULL)")
         self.conn.execute("CREATE TABLE IF NOT EXISTS deliveries (day TEXT PRIMARY KEY, at TEXT NOT NULL, markdown TEXT NOT NULL)")
         self.conn.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        self.conn.execute("CREATE TABLE IF NOT EXISTS event_history (topic TEXT NOT NULL, title TEXT NOT NULL, at TEXT NOT NULL, PRIMARY KEY(topic, title))")
         self.conn.commit()
 
     def seen(self) -> set[str]:
@@ -19,11 +21,24 @@ class Storage:
     def has_delivered(self, date: str) -> bool:
         return self.conn.execute("SELECT 1 FROM deliveries WHERE day=?", (date,)).fetchone() is not None
 
-    def record(self, date: str, markdown: str, keys: list[str]):
+    def record(self, date: str, markdown: str, keys: list[str], articles=None):
         now = datetime.now(timezone.utc).isoformat()
         with self.conn:
             self.conn.execute("INSERT OR REPLACE INTO deliveries VALUES (?,?,?)", (date, now, markdown))
             self.conn.executemany("INSERT OR IGNORE INTO seen VALUES (?,?)", [(k, now) for k in keys])
+            if articles:
+                self.conn.executemany(
+                    "INSERT OR REPLACE INTO event_history(topic, title, at) VALUES (?, ?, ?)",
+                    [(x.topic, x.title, now) for x in articles])
+                cutoff = (datetime.now(timezone.utc) - timedelta(days=4)).isoformat()
+                self.conn.execute("DELETE FROM event_history WHERE at < ?", (cutoff,))
+
+    def recent_events(self, days: int = 3):
+        """Used to suppress the same event from a different publisher tomorrow."""
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        rows = self.conn.execute(
+            "SELECT topic, title FROM event_history WHERE at >= ?", (cutoff,)).fetchall()
+        return [SimpleNamespace(topic=topic, title=title) for topic, title in rows]
 
     def last(self):
         return self.conn.execute("SELECT day,at,markdown FROM deliveries ORDER BY day DESC LIMIT 1").fetchone()
