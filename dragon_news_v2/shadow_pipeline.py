@@ -7,7 +7,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -17,6 +17,7 @@ from .evidence import assess_evidence
 from .legacy_bridge import render_v2_digest
 from .matcher import group_articles
 from .models import Article
+from .source_registry import load_source_specs
 
 MOSCOW = ZoneInfo("Europe/Moscow")
 SCHEMA_SQL = """
@@ -135,8 +136,16 @@ def build_shadow_digest(db: sqlite3.Connection, cutoff_at: datetime,
     if observed.tzinfo is None or observed < cutoff:
         raise ValueError("Observed timestamp must follow the cutoff and have a timezone")
     articles = _load_candidate_articles(db, cutoff, observed)
-    grouped = group_articles(list(articles.values()))
+    regional_sources = {s.source_id for s in load_source_specs()
+                        if 'Липецк и Липецкая область' in s.topics}
+    grouped = [
+        replace(g, category_hint='Липецк и Липецкая область')
+        if any(articles[aid].source_id in regional_sources for aid in g.article_ids)
+        else g
+        for g in group_articles(list(articles.values()))
+    ]
     groups = {g.event_key: g for g in grouped}
+    # Unknown publication origin never counts as multiple independent reports.
     evidence = {g.event_key: assess_evidence(g, articles, {}) for g in grouped}
     decisions = [evaluate_event(g, evidence[g.event_key], cutoff) for g in grouped]
     chosen = rank_events(decisions, max_items)
