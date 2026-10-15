@@ -26,6 +26,12 @@ class EventMatcherTests(unittest.TestCase):
         self.assertEqual(match_articles(a,b).decision,'different')
         self.assertEqual(len(group_articles([a,b])),2)
 
+    def test_same_link_rewritten_for_new_reading_stays_distinct(self):
+        url='https://example.org/updated-law-story'
+        first=item('first','Госдума одобрила законопроект 123456-8 в первом чтении',url=url)
+        second=item('second','Госдума одобрила законопроект 123456-8 во втором чтении',url=url)
+        self.assertEqual(match_articles(first,second).decision,'different')
+
     def test_rejection_vs_approval_stays_distinct(self):
         a=item('a','Парламент принял законопроект 123456-8 о переводах')
         b=item('b','Парламент отклонил законопроект 123456-8 о переводах')
