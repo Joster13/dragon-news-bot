@@ -5,7 +5,7 @@ import logging
 import sqlite3
 import uuid
 from datetime import datetime, timezone
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urljoin
 from zoneinfo import ZoneInfo
 import httpx
 from .adapters import parse_feed, validated_source_url
@@ -35,16 +35,49 @@ async def collect_once(client: httpx.AsyncClient, db: sqlite3.Connection,
                 host=urlsplit(s.url).hostname
                 if not host or not validated_source_url(s.url,frozenset({host})):
                     return s,[], 'INVALID_SOURCE_URL'
-                try:
-                    response=await client.get(s.url,timeout=12,follow_redirects=False,
-                                              headers={'Accept':'application/rss+xml, application/xml, text/html'})
-                    if response.status_code!=200:
-                        return s,[],f'HTTP_{response.status_code}'
-                    if len(response.content)>s.max_bytes:
-                        return s,[],'TOO_LARGE'
-                    return s,parse_feed(s,response.content,now),None
-                except (httpx.HTTPError,ValueError,UnicodeError) as exc:
-                    return s,[],type(exc).__name__
+                # Permit only a short, explicit same-host HTTPS redirect chain.
+                # Never follow a redirect automatically or fetch article links.
+                allowed_hosts=frozenset({host.rstrip('.').lower()})
+                for attempt in range(2):
+                    current=s.url
+                    visited=set()
+                    redirects=0
+                    while True:
+                        if current in visited:
+                            return s,[], 'REDIRECT_LOOP'
+                        visited.add(current)
+                        try:
+                            response=await client.get(
+                                current,timeout=12,follow_redirects=False,
+                                headers={'Accept':'application/rss+xml, application/xml, text/html'})
+                        except (httpx.ConnectTimeout,httpx.ReadTimeout) as exc:
+                            if attempt == 0:
+                                await asyncio.sleep(.15)
+                                break
+                            return s,[],type(exc).__name__
+                        except httpx.HTTPError as exc:
+                            return s,[],type(exc).__name__
+                        if response.status_code in (301,302,303,307,308):
+                            location=response.headers.get('Location','')
+                            target=urljoin(current,location) if location else ''
+                            if not validated_source_url(target,allowed_hosts):
+                                return s,[], 'UNSAFE_REDIRECT'
+                            if target in visited:
+                                return s,[], 'REDIRECT_LOOP'
+                            if redirects >= 2:
+                                return s,[], 'REDIRECT_LIMIT'
+                            current=target
+                            redirects+=1
+                            continue
+                        if response.status_code!=200:
+                            return s,[],f'HTTP_{response.status_code}'
+                        if len(response.content)>s.max_bytes:
+                            return s,[],'TOO_LARGE'
+                        try:
+                            return s,parse_feed(s,response.content,now),None
+                        except (ValueError,UnicodeError) as exc:
+                            return s,[],type(exc).__name__
+                return s,[], 'TIMEOUT'
 
         results=await asyncio.gather(*(fetch(s) for s in sources))
         ok=failed=inserted=0
