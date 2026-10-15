@@ -10,7 +10,7 @@ class RunningBuildChecks(unittest.TestCase):
 
     def test_editorial_regressions(self):
         report = run_selfcheck()
-        self.assertIn("Редакционные проверки: 10/10", report, report)
+        self.assertIn("Редакционные проверки: 18/18", report, report)
 
 
 if __name__ == "__main__":
