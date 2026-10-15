@@ -124,6 +124,17 @@ def editorial_score(item) -> int:
     title = item.title.lower()
     if NOISE_HEADLINE.search(item.title):
         return -5
+    # Advice columns and non-substantive political soundbites are not updates.
+    if re.search(
+        r"(?i)назвал[а-я]*\s+(?:основны[а-я ]+точк[а-я ]+роста|"
+        r"легальны[а-я ]+способ[а-я ]+сэкономить)|"
+        r"назвал[а-я]*\s+побед[а-я ]+.*историческ|"
+        r"высказал[а-я]*\s+об\s+угрозе|"
+        r"в\s+европарламенте\s+высказал[а-я]*|"
+        r"прокомментировал[а-я]*\s+идею",
+        title,
+    ):
+        return -5
     if re.search(r"(?i)в\s+\w+ской\s+области.*назнач(?:ил|ен)|"
                  r"председател[а-я]+\s+\w+ского\s+правительств", title):
         return -2
@@ -147,6 +158,13 @@ def editorial_score(item) -> int:
                  r"считает|мнение|рассказал|"
                  r"решили\s+умолчать", title):
         score -= 2
+    # A press comment without a concrete decision or measurable development
+    # should not displace significant policy or economic news.
+    if re.search(r"(?i)\b(?:заявил|сказал|назвал|считает|высказался|призвал)\b", title):
+        if not re.search(r"(?i)принял|утвердил|вступил|увеличил|снизил|"
+                         r"начал|подписал|ввел|ввёл|поставки|"
+                         r"отменил|ограничил|договор", title):
+            score -= 1
     return score
 
 
