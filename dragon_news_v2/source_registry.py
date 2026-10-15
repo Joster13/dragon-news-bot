@@ -30,5 +30,23 @@ def load_source_specs() -> tuple[SourceSpec,...]:
       ('bbc-russian','https://feeds.bbci.co.uk/russian/rss.xml','rss'),
       ('dw-russian','https://rss.dw.com/xml/rss-ru-all','rss'),
       ('gorod48','https://t.me/s/gorod48ru','public_telegram'),
+      ('cbpub','https://t.me/s/Cbpub','public_telegram'),
+      ('cb_economics','https://t.me/s/cb_economics','public_telegram'),
+      ('lipetsktop1','https://t.me/s/lipetsktop1','public_telegram'),
+      ('exploitex','https://t.me/s/exploitex','public_telegram'),
+      ('vgtimes','https://t.me/s/vgtimes','public_telegram'),
+      ('naebnet','https://t.me/s/naebnet','public_telegram'),
+      ('denissexy','https://t.me/s/denissexy','public_telegram'),
+      ('habr_com_news','https://t.me/s/habr_com_news','public_telegram'),
     )
-    return tuple(SourceSpec(sid,url,kind,()) for sid,url,kind in urls)
+    hints = {
+        'cbpub': ('Россия — главное',),
+        'cb_economics': ('Финансы и крипта',),
+        'lipetsktop1': ('Липецк и Липецкая область',),
+        'exploitex': ('Интернет и VPN', 'IT, облака и AI'),
+        'vgtimes': ('Игры на ПК',),
+        'naebnet': ('Интернет и VPN', 'Финансы и крипта', 'IT, облака и AI'),
+        'denissexy': ('IT, облака и AI',),
+        'habr_com_news': ('IT, облака и AI', 'Инфраструктура и безопасность'),
+    }
+    return tuple(SourceSpec(sid,url,kind,hints.get(sid,())) for sid,url,kind in urls)
