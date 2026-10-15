@@ -24,19 +24,31 @@ log=logging.getLogger("dragon-news-v2-shadow")
 
 async def main() -> None:
     parser=argparse.ArgumentParser(description="Standalone Dragon News v2 shadow test")
-    parser.add_argument("--status",action="store_true",help="Print counters read-only and exit")
+    view=parser.add_mutually_exclusive_group()
+    view.add_argument("--status",action="store_true",help="Print counters read-only and exit")
+    view.add_argument("--preview-date",help="Read source-linked items for a YYYY-MM-DD day")
     parser.add_argument("--db",default="/app/data/dragon_news_shadow.sqlite3",
                         help="Dedicated shadow SQLite database file")
     args=parser.parse_args()
     path=require_shadow_only_path(args.db)
-    if args.status:
+    if args.status or args.preview_date:
         if not path.is_file():
             raise FileNotFoundError(f"Shadow database not found: {path}")
         uri="file:"+quote(str(path),safe="/")+ "?mode=ro"
         db=sqlite3.connect(uri,uri=True)
         try:
             db.execute("PRAGMA query_only=ON")
-            report=trial_status(db)
+            if args.status:
+                report=trial_status(db)
+            else:
+                from datetime import date
+                day=date.fromisoformat(args.preview_date).isoformat()
+                row=db.execute("SELECT digest_id,status,quality_note FROM digests WHERE day=?",(day,)).fetchone()
+                if row is None:
+                    raise FileNotFoundError(f"No shadow digest for {day}")
+                items=[json.loads(r[0]) for r in db.execute(
+                    "SELECT rendered_text FROM digest_items WHERE digest_id=? ORDER BY position",(row[0],))]
+                report={"day":day,"status":row[1],"quality_note":row[2],"items":items}
             print(json.dumps(report,ensure_ascii=False,indent=2))
         finally:
             db.close()
