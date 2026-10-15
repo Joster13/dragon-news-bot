@@ -28,7 +28,7 @@ class RegistryRepairTests(unittest.TestCase):
         self.assertEqual(specs['gazeta'].url,"https://www.gazeta.ru/export/rss/first.xml")
         self.assertEqual(specs['rbc'].url,"https://t.me/s/rbc_news")
         self.assertEqual(specs['rbc'].kind,"public_telegram")
-        self.assertEqual(len(specs),12)
+        self.assertEqual(len(specs),20)
 
 
 class RetryRedirectTests(unittest.IsolatedAsyncioTestCase):
