@@ -127,11 +127,11 @@ async def enrich_articles(client: httpx.AsyncClient, items: list[NewsItem], max_
     if google_links:
         try:
             responses = await asyncio.wait_for(
-                gnews_decoder_async(google_links, timeout=8, concurrency=6),
+                gnews_decoder_async(google_links, timeout=8),
                 timeout=30,
             )
             for old, answer in zip(google_links, responses):
-                if isinstance(answer, dict) and answer.get("success"):
+                if isinstance(answer, dict) and (answer.get("success") or answer.get("status")):
                     url = answer.get("decoded_url", "")
                     if safe_public_url(url):
                         decoded[old] = url
