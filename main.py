@@ -15,9 +15,9 @@ import httpx
 from dotenv import load_dotenv
 
 from ai import explain_with_ai
-from article_content import enrich_articles
 from finance import chart_png, fetch_cbr_history, SOURCE_URL
-from news import NewsItem, collect_news
+from news import NewsItem
+from direct_news import collect_news, enrich_optional, source_report
 from rendering import export_markdown, fallback_html, rich_html
 from storage import Storage
 
@@ -104,9 +104,9 @@ class NewsBot:
                 return False
             self.last_attempt = now
             log.info("Gathering dated news for %s", day)
-            candidates, sources_available = await collect_news(self.client, now, self.db.seen(), min(65, MAX_ITEMS * 3))
-            fresh = await enrich_articles(self.client, candidates, MAX_ITEMS)
-            if sources_available < 3:
+            fresh, sources_available = await collect_news(self.client, now, self.db.seen(), MAX_ITEMS)
+            fresh = await enrich_optional(self.client, fresh)
+            if sources_available < 1:
                 if self.db.setting("rss_error_notice_day") != day:
                     await self.text(ADMIN_ID, "Не удалось подключиться к достаточному количеству новостных лент. "
                                               "Не подменяю свежие новости старой информацией. Попробуй /today позже.")
@@ -145,9 +145,9 @@ class NewsBot:
                 now = datetime.now(TZ)
                 log.info("Preview started for %s", now.date())
                 fresh, sources_available = await asyncio.wait_for(
-                    collect_news(self.client, now, set(), 32), timeout=58
+                    collect_news(self.client, now, set(), min(MAX_ITEMS, 28)), timeout=58
                 )
-                fresh = await asyncio.wait_for(enrich_articles(self.client, fresh, 12), timeout=65)
+                fresh = await asyncio.wait_for(enrich_optional(self.client, fresh), timeout=35)
                 if sources_available < 3:
                     await self.text(chat_id, "Не удалось получить новости: доступны менее трёх RSS-лент. Попробуй позже.")
                 elif not fresh:
@@ -214,6 +214,7 @@ class NewsBot:
                              f"Автоматически каждый день в {HOUR:02d}:{MINUTE:02d} МСК.\n"
                              "/today — отправить свежую сводку сейчас (один раз в день)\n"
                              "/preview — проверить новости без записи в историю\n"
+                             "/sources — проверить доступность источников\n"
                              "/demo — посмотреть новый формат Rich Messages\n"
                              "/export — получить предыдущую сводку .md\n"
                              "/rates — график USD / EUR / CNY по данным ЦБ\n"
@@ -229,6 +230,8 @@ class NewsBot:
                              f"OpenAI API: {'подключён' if os.getenv('OPENAI_API_KEY') else 'не подключён (RSS-режим)'}")
         elif command == "/today":
             await self.digest(manual=True)
+        elif command == "/sources":
+            await self.text(chat_id, source_report())
         elif command == "/preview":
             if self.preview_task is not None and not self.preview_task.done():
                 if not self.preview_busy_notice:
@@ -345,6 +348,7 @@ class NewsBot:
             {"command": "start", "description": "Меню"},
             {"command": "today", "description": "Новости на сегодня"},
             {"command": "demo", "description": "Посмотреть Rich Messages"},
+            {"command": "sources", "description": "Источники новостей"},
             {"command": "status", "description": "Расписание и состояние"},
             {"command": "export", "description": "Сводка в Markdown"},
             {"command": "rates", "description": "График валют ЦБ РФ"},
