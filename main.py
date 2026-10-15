@@ -22,6 +22,10 @@ from storage import Storage
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+# httpx INFO logs include the full Telegram API URL, which embeds BOT_TOKEN.
+# Suppress third-party request logging while retaining application diagnostics.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
 log = logging.getLogger("dragon-news")
 
 TOKEN = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or ""
