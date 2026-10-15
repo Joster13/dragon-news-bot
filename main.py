@@ -20,6 +20,7 @@ from news import NewsItem
 from direct_news import collect_news, enrich_optional, source_report
 from rendering import export_markdown, fallback_html, rich_html
 from storage import Storage
+from selfcheck import BUILD_ID, run_selfcheck
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -217,7 +218,7 @@ class NewsBot:
                              f"Автоматически каждый день в {HOUR:02d}:{MINUTE:02d} МСК.\n"
                              "/today — отправить свежую сводку сейчас (один раз в день)\n"
                              "/preview — проверить новости без записи в историю\n"
-                             "/sources — проверить доступность источников\n"
+                             "/sources — проверить доступность источников\n"\n                             "/selftest — версия и проверка редакционных фильтров\n"
                              "/demo — посмотреть новый формат Rich Messages\n"
                              "/export — получить предыдущую сводку .md\n"
                              "/rates — график USD / EUR / CNY по данным ЦБ\n"
@@ -230,11 +231,14 @@ class NewsBot:
             await self.text(chat_id, f"Расписание: ежедневно {HOUR:02d}:{MINUTE:02d} МСК\n"
                              f"Автоотправка: {'включена' if AUTO_SEND else 'выключена'}\n"
                              f"Последняя отправка: {last[0] if last else 'ещё нет'}\n"
+                             f"Сборка: {BUILD_ID}\n"
                              f"OpenAI API: {'подключён' if os.getenv('OPENAI_API_KEY') else 'не подключён (RSS-режим)'}")
         elif command == "/today":
             await self.digest(manual=True)
         elif command == "/sources":
             await self.text(chat_id, source_report())
+        elif command == "/selftest":
+            await self.text(chat_id, run_selfcheck())
         elif command == "/preview":
             if self.preview_task is not None and not self.preview_task.done():
                 if not self.preview_busy_notice:
@@ -352,11 +356,12 @@ class NewsBot:
             {"command": "today", "description": "Новости на сегодня"},
             {"command": "demo", "description": "Посмотреть Rich Messages"},
             {"command": "sources", "description": "Источники новостей"},
+            {"command": "selftest", "description": "Проверка версии и фильтров"},
             {"command": "status", "description": "Расписание и состояние"},
             {"command": "export", "description": "Сводка в Markdown"},
             {"command": "rates", "description": "График валют ЦБ РФ"},
         ]})
-        log.info("Dragon News running (ADMIN_ID configured: %s)", bool(ADMIN_ID))
+        log.info("Dragon News running build=%s (ADMIN_ID configured: %s)", BUILD_ID, bool(ADMIN_ID))
         try:
             await asyncio.gather(self.listen(), self.scheduler())
         finally:
