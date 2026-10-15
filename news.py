@@ -154,7 +154,7 @@ def decode_feed(topic: str, viewpoint: str, payload: bytes, now: datetime, age_h
             descr = descr.replace("View Full Coverage", "").strip()
             # RSS descriptions often contain only the article headline and publisher.
             # Never pass them off as evidence-rich editorial summaries.
-            normalized = lambda v: re.sub(r"[^\\w]+", "", v.lower())
+            normalized = lambda v: re.sub(r"[^\w]+", "", v.lower())
             headline = normalized(title.rsplit(" - ", 1)[0])
             excerpt = normalized(descr)
             if not descr or len(descr) < 70 or (headline and (excerpt.startswith(headline) or headline in excerpt)):
