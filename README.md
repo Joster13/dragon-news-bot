@@ -81,10 +81,15 @@ The legacy Telegram commands, Rich Messages and 09:00 Moscow scheduler are uncha
 - V2_SHADOW_ENABLED=true: an hourly collector runs inside the existing bot process and uses its HTTP client; no second Telegram poller.
 - V2_DB_PATH=/app/data/dragon_news_shadow.sqlite3: a separate SQLite file; the integration rejects production DB_PATH.
 
-Before enabling on BotHost, back up and verify /app/data/dragon_news.sqlite3 using SQLite Backup API.
-GitHub cannot access or back up the live BotHost /app/data disk.
+Shadow mode now collects hourly and writes a **daily local-only test digest at 09:00 Moscow**
+(with incomplete-report catch-up allowed before 12:00); it **does not send Telegram messages**.
+Reports, audit decisions and HTML previews stay in the separate shadow SQLite.
+The operator elected to skip the production DB backup, knowingly accepting loss risk.
+Therefore do not migrate, overwrite or access the live /app/data/dragon_news.sqlite3.
+A backup is strongly recommended before any future migration/deployment, and GitHub
+cannot back up the BotHost /app/data disk.
 Never commit tokens, SQLite databases or private data to this public repository.
-Do not merge this draft PR or modify AUTO_SEND for v2: shadow mode collects only.
+Do not merge this draft PR or alter the active AUTO_SEND setting without an explicit release decision.
 
 Offline checks: python -m compileall -q . ; python -m unittest discover -s tests -v.
 Real feed reachability must be tested later from the BotHost network.
