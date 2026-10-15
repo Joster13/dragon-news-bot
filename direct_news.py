@@ -20,6 +20,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from news import NewsItem, TOPIC_ORDER
+from editorial import deduplicate, editorial_score
 
 log = logging.getLogger("dragon-news.sources")
 
@@ -314,9 +315,12 @@ def _rank(item: NewsItem) -> tuple[int, float]:
 def select_balanced(items: list[NewsItem], max_items: int, seen: set[str]) -> list[NewsItem]:
     by_topic = defaultdict(list)
     keys = set(seen)
-    # Keep highest-value duplicate and don't conflate unrelated topics.
-    for item in sorted(items, key=_rank, reverse=True):
+    # Keep one representative per event, not one article per publisher.
+    # Remove low-value filler instead of forcing 20-30 entries.
+    for item in deduplicate(items):
         if item.key in keys:
+            continue
+        if editorial_score(item) < 2:
             continue
         keys.add(item.key)
         by_topic[item.topic].append(item)
