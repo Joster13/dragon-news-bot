@@ -1,51 +1,39 @@
+"""Smoke tests for currently supported direct-news pipeline."""
 import unittest
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from news import NewsItem, is_significant
-from article_content import description_from_html, short_extract, safe_public_url
+from news import NewsItem
+from direct_news import category, has_details, Feed, rss_items
 from rendering import rich_html
 
 NOW = datetime(2026, 10, 15, 9, tzinfo=ZoneInfo("Europe/Moscow"))
 
 
-def item(topic, title):
-    return NewsItem(topic, title, "", "https://example.com/story", "Example", NOW)
-
-
 class NewsQualityTests(unittest.TestCase):
-    def test_unrelated_truck_not_in_vpn(self):
-        self.assertFalse(is_significant(item("Интернет и VPN", "Троих задержали после преследования и блокировки грузовика в Туркестанской области")))
+    def test_no_duplicate_headline_as_description(self):
+        self.assertFalse(has_details("В Липецке отключат воду", "В Липецке отключат воду"))
+        self.assertTrue(has_details("В Липецке отключат воду", "Отключение затронет несколько адресов из-за ремонта трубопровода."))
 
-    def test_real_vpn_headline(self):
-        self.assertTrue(is_significant(item("Интернет и VPN", "РКН ограничил доступ к VPN-протоколу в России")))
+    def test_direct_rss_retains_original_link(self):
+        xml = (b'<rss><channel><item><title>'
+               'В Липецке отключат холодную воду'.encode("utf-8")
+               + b'</title><link>https://example.com/news/123</link>'
+               + b'<pubDate>Thu, 15 Oct 2026 08:00:00 +0300</pubDate><description>'
+               + 'Из-за ремонта водопровода отключение затронет несколько улиц Липецка.'.encode("utf-8")
+               + b'</description></item></channel></rss>')
+        data = rss_items(Feed("Publisher", "https://example.com/rss"), xml, NOW)
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0].link, "https://example.com/news/123")
 
-    def test_local_entertainment_dropped(self):
-        self.assertFalse(is_significant(item("Липецк и Липецкая область", "Фестиваль «Липецкие театральные встречи» завершит спектакль")))
+    def test_substantive_vpn_news(self):
+        self.assertEqual(category("РКН ограничил работу VPN"), "Интернет и VPN")
 
-    def test_local_infrastructure_retained(self):
-        self.assertTrue(is_significant(item("Липецк и Липецкая область", "В Липецкой области заменят 175 лифтов")))
-
-    def test_meta_extract(self):
-        markup = '<html><head><meta property="og:description" content="' + ("Стали известны подробности ремонта городской инфраструктуры. " * 3) + '"></head></html>'
-        self.assertGreater(len(description_from_html(markup)), 100)
-
-    def test_article_body_extract(self):
-        markup = '<html><article><p>' + ("Департамент сообщил о плановом ремонте инженерных коммуникаций. " * 4) + '</p></article></html>'
-        self.assertGreater(len(description_from_html(markup)), 150)
-
-    def test_short_extract_limited(self):
-        long = ("Официальный представитель рассказал о работах в регионе. " * 40)
-        self.assertLessEqual(len(short_extract(long).split()), 41)
-
-    def test_private_hosts_rejected(self):
-        self.assertFalse(safe_public_url("https://127.0.0.1/test"))
-        self.assertFalse(safe_public_url("http://example.org/story"))
-        self.assertTrue(safe_public_url("https://example.org/story"))
-
-    def test_no_footer(self):
+    def test_no_rss_footer(self):
         self.assertNotIn("Автоматический обзор по публичным лентам", rich_html([], NOW))
 
+    def test_no_ads_from_games(self):
+        self.assertIsNone(category("Скидки на компьютерные игры: топ-10 предложений"))
 
 if __name__ == "__main__":
     unittest.main()
