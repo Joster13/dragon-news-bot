@@ -73,12 +73,29 @@ def _actions(headline: str) -> str:
     return ""
 
 
+def _legislative_stage(headline: str) -> str:
+    text = headline.lower()
+    checks = (
+        ("reading1", r"(?:^|\W)(?:i|1|первом|первое|первого)\s+чтен"),
+        ("reading2", r"(?:^|\W)(?:ii|2|втором|второе|второго)\s+чтен"),
+        ("reading3", r"(?:^|\W)(?:iii|3|третьем|третье|третьего)\s+чтен"),
+        ("signed", r"подписал[а-я]*\s+закон|закон\s+подписан"),
+    )
+    for stage, pattern in checks:
+        if re.search(pattern, text):
+            return stage
+    return ""
+
+
 def same_event(a, b) -> bool:
     """Conservative match of separate headlines describing the SAME event.
 
     Avoid matching unrelated news merely because a country or person repeats.
     """
     if a.topic != b.topic:
+        return False
+    stage_a, stage_b = _legislative_stage(a.title), _legislative_stage(b.title)
+    if stage_a and stage_b and stage_a != stage_b:
         return False
     # Do not merge a later rejection with an earlier approval.
     action_a, action_b = _actions(a.title), _actions(b.title)
