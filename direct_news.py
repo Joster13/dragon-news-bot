@@ -127,7 +127,8 @@ NATIONAL_IMPORTANT = re.compile(
 LAW = re.compile(
     r"законопроект|федеральн[а-я ]+закон|"
     r"постановлени[ея]|новы[а-я ]+правил[ао]|"
-    r"госдум[а-я]*[а-я ,.]{0,35}(?:принял|приняла|одобрил|одобрила|"
+    r"госпошлин|налогов[а-я ]+вычет|"
+    r"(?:госдум[а-я]*|\bГД\b)[а-я ,.]{0,35}(?:принял|приняла|одобрил|одобрила|"
     r"рассмотрит|внесл|утверди)|"
     r"правительств[а-я ]+(?:принял|приняло|утвердило|утвердил)|"
     r"вступ[а-я ]+в\s+силу",
@@ -345,6 +346,14 @@ def select_balanced(items: list[NewsItem], max_items: int, seen: set[str], recen
         if item.key in keys:
             continue
         if recent_events and any(same_event(item, old) for old in recent_events):
+            continue
+        # Do not publish military assertions as headline-only news.
+        if item.topic == "СВО — позиции сторон" and len(item.summary.strip()) < 35:
+            continue
+        if item.topic == "Инфраструктура и безопасность" and re.search(
+            r"(?i)отч[её]т\s+о\s+динамике|предложил[а-я]*\s+размещать\s+дата-центр",
+            item.title,
+        ):
             continue
         minimum = 4 if item.topic in ("Россия — главное", "Законы и правила", "Мир и экономика") else 2
         if editorial_score(item) < minimum:
