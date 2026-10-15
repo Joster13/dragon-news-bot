@@ -110,13 +110,25 @@ class ShadowPipelineTests(unittest.TestCase):
 
     def test_atomic_failure_cannot_leave_half_digest(self):
         upsert_article(self.db,article('a','tass','Госдума приняла законопроект 123456-8 о новых правилах в первом чтении',url='https://tass.ru/a'))
-        # Invalid legacy-injected URL cannot be placed in any snapshot.
-        self.db.execute("UPDATE articles SET canonical_url='javascript:alert(1)' WHERE article_id='a'")
+        # Failure during digest insertion must roll back event and decision writes.
+        self.db.execute("""CREATE TRIGGER prevent_digest BEFORE INSERT ON digests
+            BEGIN SELECT RAISE(FAIL, 'injected_failure'); END""")
         self.db.commit()
-        with self.assertRaises(ValueError):
+        with self.assertRaises(sqlite3.IntegrityError):
             build_shadow_digest(self.db,CUTOFF)
         self.assertEqual(self.db.execute('SELECT count(*) FROM digests').fetchone()[0],0)
         self.assertEqual(self.db.execute('SELECT count(*) FROM digest_items').fetchone()[0],0)
+        self.assertEqual(self.db.execute('SELECT count(*) FROM events').fetchone()[0],0)
+        self.assertEqual(self.db.execute('SELECT count(*) FROM editorial_decisions').fetchone()[0],0)
+
+    def test_invalid_stored_url_is_excluded_without_leak(self):
+        upsert_article(self.db,article('a','tass',
+            'Госдума приняла законопроект 123456-8 о новых правилах в первом чтении'))
+        self.db.execute("UPDATE articles SET canonical_url='javascript:alert(1)' WHERE article_id='a'")
+        self.db.commit()
+        out=build_shadow_digest(self.db,CUTOFF)
+        self.assertEqual(out.item_count,0)
+        self.assertNotIn('javascript:',get_shadow_digest(self.db,'2026-10-15')['rich_html'])
 
 
 class ShadowScheduleTests(unittest.TestCase):
