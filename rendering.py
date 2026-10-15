@@ -55,7 +55,6 @@ def rich_html(news: list[NewsItem], moment: datetime, summary_map: dict[str, tup
             parts.append(f'<p><a href="{e(article.link)}">Источник: {e(article.source)}</a></p>')
         parts.append("</details>")
         parts.append("<hr/>")
-    parts.append("<footer>Автоматический обзор по публичным лентам. Дата из RSS может отличаться от даты события. Сверяйте важные сведения с первоисточником.</footer>")
     return "\n".join(parts)
 
 
