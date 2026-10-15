@@ -20,7 +20,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from news import NewsItem, TOPIC_ORDER
-from editorial import deduplicate, editorial_score, same_event
+from editorial import deduplicate, editorial_score, same_event, source_quality
 from editorial_gate import is_publishable
 
 log = logging.getLogger("dragon-news.sources")
@@ -394,7 +394,11 @@ def select_balanced(items: list[NewsItem], max_items: int, seen: set[str], recen
     # Filter BEFORE dedup: a low-quality item must not hide a better report
     # of the same event from another publisher.
     eligible = [item for item in items if is_publishable(item)]
-    unique = deduplicate(eligible)
+    unique = sorted(
+        deduplicate(eligible),
+        key=lambda x: (bool(x.summary.strip()), editorial_score(x), source_quality(x)),
+        reverse=True,
+    )
     by_topic = defaultdict(list)
     deferred = defaultdict(list)
     source_counts = defaultdict(int)
