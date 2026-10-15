@@ -4,3 +4,6 @@ Pillow>=10,<13
 
 beautifulsoup4>=4.12,<5
 googlenewsdecoder==0.2.1
+# googlenewsdecoder uses selectolax.parser (Modest), removed in selectolax 1.0.
+# Pin the last compatible 0.x line until the decoder switches to Lexbor.
+selectolax==0.4.12
