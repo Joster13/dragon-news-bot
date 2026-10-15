@@ -33,13 +33,13 @@ async def run_shadow_cycle(client: httpx.AsyncClient, db: sqlite3.Connection,
         raise ValueError('Cycle timestamp must have timezone')
     report = await collect_once(client, db, sources, now)
     today = now.astimezone(MOSCOW).date().isoformat()
-    built = db.execute('SELECT 1 FROM digests WHERE day=?', (today,)).fetchone() is not None
-    cutoff = due_shadow_cutoff(now, built)
+    existing = db.execute('SELECT status FROM digests WHERE day=?', (today,)).fetchone()
+    cutoff = due_shadow_cutoff(now, bool(existing and existing[0] == 'READY'))
     result = None
     if cutoff is not None:
         # During catchup, include articles fetched before now whose PUBLISHED
         # timestamp is within the normal news window ending at 09:00.
-        result = build_shadow_digest(db, cutoff, observed_until=now)
+        result = build_shadow_digest(db, cutoff, observed_until=now, retry_incomplete=True)
         log.info('V2 shadow snapshot saved: day=%s items=%d status=%s',
                  result.day, result.item_count, result.status)
     return ShadowCycle(report, result)
