@@ -112,6 +112,29 @@ class StandaloneRunnerTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(report["status"],"not_started")
             self.assertFalse(report["ready_for_review"])
 
+    async def test_sources_report_lists_health_without_sql_writes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path=str(Path(directory)/"dragon_news_shadow.sqlite3")
+            db=open_shadow_db(path)
+            with db:
+                db.execute("INSERT INTO sources(source_id,kind,url,last_error,last_success_at) VALUES(?,?,?,?,?)",
+                           ("rbc","public_telegram","https://t.me/s/rbc_news",None,START.isoformat()))
+                db.execute("INSERT INTO sources(source_id,kind,url,last_error,last_success_at) VALUES(?,?,?,?,?)",
+                           ("gazeta","rss","https://www.gazeta.ru/export/rss/first.xml","HTTP_404",None))
+            db.close()
+            from io import StringIO
+            stream=StringIO()
+            with patch("sys.argv",["shadow_runner.py","--sources","--db",path]):
+                with patch("sys.stdout",stream):
+                    await runner_main()
+            report=json.loads(stream.getvalue())
+            self.assertEqual(len(report["sources"]),2)
+            rbc=next(x for x in report["sources"] if x["source_id"]=="rbc")
+            self.assertEqual(rbc["state"],"ok")
+            gazeta=next(x for x in report["sources"] if x["source_id"]=="gazeta")
+            self.assertEqual(gazeta["state"],"error")
+            self.assertEqual(gazeta["last_error"],"HTTP_404")
+
     async def test_preview_date_reads_saved_items_without_network(self):
         with tempfile.TemporaryDirectory() as directory:
             path=str(Path(directory)/"dragon_news_shadow.sqlite3")
