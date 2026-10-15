@@ -10,7 +10,7 @@ import hashlib
 import html
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from typing import Iterable
 from urllib.parse import urlencode, urlparse
@@ -64,6 +64,47 @@ QUERIES = [
     ("Инфраструктура и безопасность", '(CISA OR CVE OR cyberattack OR ransomware) (critical OR exploited OR servers) when:1d', 4, ""),
     ("Игры на ПК", '(Steam OR PC) (release OR launched OR delayed OR localization) when:1d', 3, ""),
 ]
+
+# Publisher RSS links avoid the Google News URL decoder as a single point of failure.
+# Direct publisher feeds provide original links and often a real description.
+DIRECT_FEEDS = (
+    ("Интерфакс", "https://www.interfax.ru/rss"),
+    ("ТАСС", "https://tass.ru/rss/v2.xml"),
+    ("Коммерсантъ", "https://www.kommersant.ru/RSS/main.xml"),
+)
+
+
+def classify_publisher_item(item: NewsItem) -> NewsItem | None:
+    title = item.title.rsplit(" - ", 1)[0].lower()
+    if any(x in title for x in BAD_WORDS + SPECULATION):
+        return None
+    if any(x in title for x in ("спортсмен", "актрис", "певиц", "телешоу", "топ-10", "реклам")):
+        return None
+    if any(x in title for x in ("липецк", "липецкой област", "елец")):
+        topic = "Липецк и Липецкая область"
+    elif any(x in title for x in ("госдум", "законопроект", "налог", "льгот", "правительств", "закон ")):
+        topic = "Законы и правила"
+    elif any(x in title for x in ("интернет", "роскомнадзор", "vpn", "vless", "телеграм", "telegram", "блокировк сайта")):
+        topic = "Интернет и VPN"
+    elif any(x in title for x in ("банк", "цб ", "инфляц", "ставк", "вклад", "криптовалют", "биткоин", "usdt", "курс руб", "бирж")):
+        topic = "Финансы и крипта"
+    elif any(x in title for x in ("украин", "вооруженн", "сво", "военн", "боев", "беспилот", "бпла", "переговоры по украине")):
+        topic = "СВО — позиции сторон"
+    elif any(x in title for x in ("нейросет", "ии ", "ai ", "openai", "google", "microsoft", "яндекс", "чат-бот", "облачн")):
+        topic = "IT, облака и AI"
+    elif any(x in title for x in ("cve-", "уязвим", "кибератак", "вымогател", "дата-центр", "сервер")):
+        topic = "Инфраструктура и безопасность"
+    elif any(x in title for x in ("steam", "игр ", "релиз игры", "видеоигр")):
+        topic = "Игры на ПК"
+    elif any(x in title for x in ("сша", "ес ", "евросоюз", "кита", "иран", "израил", "герман", "нефть", "санкции")):
+        topic = "Мир и экономика"
+    elif any(x in title for x in ("росси", "рф ", "москв", "федеральн", "минпромторг", "минфин", "производств", "экономик")):
+        topic = "Россия — главное"
+    else:
+        return None
+    result = replace(item, topic=topic)
+    return result if is_significant(result) else None
+
 
 TOPIC_ORDER = [
     "Липецк и Липецкая область", "Россия — главное", "Законы и правила",
@@ -216,7 +257,28 @@ async def collect_news(client: httpx.AsyncClient, now: datetime, seen: set[str],
                 return (topic, take, [], False)
 
     results = await asyncio.gather(*(one(*q) for q in QUERIES))
+
+    async def publisher(label: str, url: str):
+        async with limit:
+            try:
+                r = await client.get(url, timeout=12)
+                r.raise_for_status()
+                rows = decode_feed("Россия — главное", "", r.content, now)
+                articles = []
+                for entry in rows[:90]:
+                    categorized = classify_publisher_item(replace(entry, source=label))
+                    if categorized is not None:
+                        articles.append(categorized)
+                log.info("Direct RSS %s: %d relevant articles", label, len(articles))
+                return articles, True
+            except (httpx.HTTPError, ValueError) as exc:
+                log.warning("Direct RSS %s failed: %s", label, type(exc).__name__)
+                return [], False
+
+    direct_results = await asyncio.gather(*(publisher(*feed) for feed in DIRECT_FEEDS))
+
     success_count = sum(ok for _, _, _, ok in results)
+    success_count += sum(ok for _, ok in direct_results)
     # First pass: per query limit. Then cap total by priority topic order.
     candidates = {}
     unique = set(seen)
@@ -230,6 +292,12 @@ async def collect_news(client: httpx.AsyncClient, now: datetime, seen: set[str],
                 count += 1
             if count >= take:
                 break
+    for articles, _ in direct_results:
+        for item in articles:
+            if item.key not in unique:
+                candidates.setdefault(item.topic, []).append(item)
+                unique.add(item.key)
+    log.info("News candidates: %d, feeds reachable: %d", sum(len(v) for v in candidates.values()), success_count)
     # Round-robin fills important sections before expanding any section.
     selected: list[NewsItem] = []
     indexes = {t: 0 for t in TOPIC_ORDER}
