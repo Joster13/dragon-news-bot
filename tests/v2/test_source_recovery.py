@@ -22,7 +22,9 @@ def source(sid,url,kind='rss'):
 class RegistryRepairTests(unittest.TestCase):
     def test_repaired_source_registry(self):
         specs={s.source_id:s for s in load_source_specs()}
-        self.assertEqual(specs['kommersant'].url,"https://www.kommersant.ru/rss/main.xml")
+        self.assertEqual(specs['kommersant'].source_id,"kommersant")
+        self.assertEqual(specs['kommersant'].url,"https://t.me/s/kommersant")
+        self.assertEqual(specs['kommersant'].kind,"public_telegram")
         self.assertEqual(specs['gazeta'].url,"https://www.gazeta.ru/export/rss/first.xml")
         self.assertEqual(specs['rbc'].url,"https://t.me/s/rbc_news")
         self.assertEqual(specs['rbc'].kind,"public_telegram")
@@ -130,6 +132,57 @@ class RetryRedirectTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(count,1)
         self.assertEqual(fail,[])
         self.assertEqual(calls,['https://t.me/s/rbc_news'])
+
+    async def test_kommersant_public_telegram_collects_source_link(self):
+        payload = ('<div class="tgme_widget_message" data-post="kommersant/82351">'
+                   '<div class="tgme_widget_message_text">'
+                   'Госдума приняла поправки в первом чтении. Подробности опубликованы.'
+                   '</div><time datetime="2026-10-15T17:00:00+00:00"></time></div>'
+                   ).encode("utf-8")
+        observed=[]
+        def handler(request):
+            observed.append(str(request.url))
+            return httpx.Response(200,content=payload)
+        entry=next(s for s in load_source_specs() if s.source_id=="kommersant")
+        result,count,fail=await self.collect(entry,handler)
+        self.assertEqual((result.ok_count,count,fail),(1,1,[]))
+        self.assertEqual(observed,["https://t.me/s/kommersant"])
+
+    async def test_kommersant_old_rss_articles_remain_after_telegram_switch(self):
+        payload = ('<div class="tgme_widget_message" data-post="kommersant/82351">'
+                   '<div class="tgme_widget_message_text">Новые сведения о законопроекте.</div>'
+                   '<time datetime="2026-10-15T17:00:00+00:00"></time></div>'
+                   ).encode("utf-8")
+        with TemporaryDirectory() as folder:
+            db=open_shadow_db(str(Path(folder)/"dragon_news_shadow.sqlite3"))
+            try:
+                async with httpx.AsyncClient(transport=httpx.MockTransport(
+                    lambda req: httpx.Response(200,content=payload if req.url.host=="t.me" else RSS)
+                )) as client:
+                    original=source("kommersant","https://www.kommersant.ru/rss/main.xml")
+                    first=await collect_once(client,db,(original,),NOW)
+                    before=db.execute(
+                        "SELECT article_id,canonical_url FROM articles WHERE source_id='kommersant'"
+                    ).fetchall()
+                    replacement=next(s for s in load_source_specs() if s.source_id=="kommersant")
+                    second=await collect_once(client,db,(replacement,),NOW)
+                    third=await collect_once(client,db,(replacement,),NOW)
+                self.assertEqual((first.inserted_count,second.inserted_count,third.inserted_count),(1,1,0))
+                self.assertEqual(
+                    db.execute("SELECT article_id,canonical_url FROM articles WHERE article_id=?",
+                               (before[0][0],)).fetchone(),
+                    before[0]
+                )
+                self.assertEqual(
+                    db.execute("SELECT url,kind FROM sources WHERE source_id='kommersant'").fetchone(),
+                    ("https://t.me/s/kommersant","public_telegram")
+                )
+                self.assertEqual(
+                    {row[0] for row in db.execute("SELECT canonical_url FROM articles WHERE source_id='kommersant'")},
+                    {"https://www.kommersant.ru/doc/777","https://t.me/kommersant/82351"}
+                )
+            finally:
+                db.close()
 
     async def test_feed_change_preserves_old_articles(self):
         with TemporaryDirectory() as folder:
