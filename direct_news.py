@@ -21,6 +21,7 @@ from bs4 import BeautifulSoup
 
 from news import NewsItem, TOPIC_ORDER
 from editorial import deduplicate, editorial_score, same_event
+from editorial_gate import is_publishable
 
 log = logging.getLogger("dragon-news.sources")
 
@@ -370,7 +371,11 @@ def select_balanced(items: list[NewsItem], max_items: int, seen: set[str], recen
     keys = set(seen)
     # Keep one representative per event, not one article per publisher.
     # Remove low-value filler instead of forcing 20-30 entries.
-    for item in deduplicate(items):
+    # Filter eligibility BEFORE deduplication, so a poor first article cannot
+    # suppress a useful second article about the same event.
+    eligible = [item for item in items if is_publishable(item)]
+    log.info("Editorial gate: %d/%d eligible", len(eligible), len(items))
+    for item in deduplicate(eligible):
         if item.key in keys:
             continue
         if recent_events and any(same_event(item, old) for old in recent_events):
