@@ -47,20 +47,24 @@ class NewsItem:
 # Searches collect multiple independent publisher reports; they do NOT themselves
 # independently verify the underlying events.
 QUERIES = [
-    ("Липецк и Липецкая область", 'Липецк область отключения ЖКХ тарифы дороги школы безопасность when:1d', 4, ""),
-    ("Липецк и Липецкая область", 'site:gorod48.ru Липецк when:1d', 3, ""),
-    ("Россия — главное", 'Россия экономика правительство цены крупные события when:1d', 3, ""),
-    ("Законы и правила", 'Госдума принят закон законопроект налоги ограничения мобилизация when:1d', 3, ""),
-    ("Интернет и VPN", 'РКН блокировка VPN Telegram VLESS ТСПУ интернет связь when:1d', 3, ""),
-    ("Финансы и крипта", 'ЦБ банки ключевая ставка 115-ФЗ вклады ИИС USDT P2P санкции when:1d', 3, ""),
-    ("СВО — позиции сторон", 'Минобороны РФ Украина фронт переговоры when:1d', 2, "Российские публикации"),
-    ("СВО — позиции сторон", 'site:ukrinform.net Ukraine war update when:1d', 2, "Украинские публикации"),
-    ("СВО — позиции сторон", 'site:reuters.com Ukraine Russia war when:1d', 2, "Международные публикации"),
-    ("Мир и экономика", 'world geopolitics sanctions EU China USA global economy when:1d', 2, ""),
-    ("IT, облака и AI", 'Microsoft Google OpenAI ChatGPT Yandex VK major release when:1d', 3, ""),
-    ("Инфраструктура и безопасность", 'critical vulnerability exploited CISA server cloud data breach when:1d', 2, ""),
-    ("Игры на ПК", 'Steam PC game release Russian localization major update when:1d', 2, ""),
+    # Shorter OR-based queries avoid rejecting all recent articles.
+    ("Липецк и Липецкая область", '(Липецк OR "Липецкая область" OR Елец) (отключение OR отопление OR тарифы OR дороги OR безопасность OR выплаты) when:1d', 5, ""),
+    ("Липецк и Липецкая область", 'site:gorod48.ru (Липецк OR область) when:1d', 5, ""),
+    ("Россия — главное", 'Россия (экономика OR правительство OR цены OR промышленность) when:1d', 4, ""),
+    ("Россия — главное", 'site:interfax.ru Россия (решение OR рост OR снижение) when:1d', 3, ""),
+    ("Законы и правила", '(Госдума OR правительство) (закон OR постановление OR налог OR льготы) when:1d', 4, ""),
+    ("Интернет и VPN", '(Роскомнадзор OR РКН OR VPN OR Telegram OR VLESS OR блокировка) when:1d', 4, ""),
+    ("Финансы и крипта", '(ЦБ OR банки OR ставка OR вклады OR USDT OR P2P) (Россия OR рубль) when:1d', 4, ""),
+    ("Финансы и крипта", '(санкции OR криптовалюта OR переводы) (банк OR биржа OR Россия) when:1d', 3, ""),
+    ("СВО — позиции сторон", '(Минобороны OR фронт OR Украина OR переговоры) when:1d', 3, "Российские публикации"),
+    ("СВО — позиции сторон", 'site:ukrinform.net (Russia OR Ukraine) when:1d', 2, "Украинские публикации"),
+    ("СВО — позиции сторон", 'site:reuters.com (Ukraine OR Russia) when:1d', 2, "Международные публикации"),
+    ("Мир и экономика", '(world OR EU OR China OR USA) (sanctions OR economy OR trade OR security) when:1d', 4, ""),
+    ("IT, облака и AI", '(Microsoft OR Google OR OpenAI OR ChatGPT OR Yandex OR VK) (release OR update OR API OR AI) when:1d', 4, ""),
+    ("Инфраструктура и безопасность", '(CISA OR CVE OR cyberattack OR ransomware) (critical OR exploited OR servers) when:1d', 4, ""),
+    ("Игры на ПК", '(Steam OR PC) (release OR launched OR delayed OR localization) when:1d', 3, ""),
 ]
+
 TOPIC_ORDER = [
     "Липецк и Липецкая область", "Россия — главное", "Законы и правила",
     "Интернет и VPN", "Финансы и крипта", "СВО — позиции сторон",
@@ -81,6 +85,27 @@ IMPACT = {
 }
 
 BAD_WORDS = ("футбол", "хоккей", "чемпионат", "теннис", "спартак", "селебрити", "звезда шоу", "свадьба пев", "гороскоп")
+# Exclude routine local crime and speculative opinion pieces.
+LOCAL_NOISE = ("дтп", "водитель", "угнал", "пьяный", "избил", "подрал", "кража", "задержали", "похитил", "разбил машин")
+SPECULATION = ("что будет, если", "что будет если", "какое решение примет", "три сценария", "пять сценариев")
+REGION_WORDS = ("липецк", "липецкой", "липецкая", "елец", "гряз", "задонск", "данков", "лебедян", "усман", "чаплыгин", "добрин", "тербун", "хлевн")
+IMPORTANT_LOCAL = ("отключ", "водоснаб", "отоплен", "тариф", "дорог", "перекры", "свет", "школ", "поликлин", "льгот", "сирен", "опасност", "бпла", "аэропорт", "электроэнерг", "автобус", "бюджет", "завод", "интернет", "связь", "производств")
+
+
+def is_significant(item: NewsItem) -> bool:
+    title = item.title.rsplit(" - ", 1)[0].lower()
+    if any(word in title for word in BAD_WORDS + SPECULATION):
+        return False
+    if item.topic == "Липецк и Липецкая область":
+        if any(word in title for word in LOCAL_NOISE):
+            return False
+        # Regional source alone does not make a nationwide report a local event.
+        if "в рф" in title or "в россии" in title:
+            return False
+        locality = any(word in title for word in REGION_WORDS)
+        meaningful_local = any(word in title for word in IMPORTANT_LOCAL)
+        return locality or meaningful_local
+    return True
 
 
 def clean_snippet(raw: str) -> str:
@@ -127,9 +152,16 @@ def decode_feed(topic: str, viewpoint: str, payload: bytes, now: datetime, age_h
                 source = urlparse(url).hostname or "Издание"
             descr = clean_snippet(entry.findtext("description") or "")
             descr = descr.replace("View Full Coverage", "").strip()
-            if descr.lower() == title.lower():
+            # RSS descriptions often contain only the article headline and publisher.
+            # Never pass them off as evidence-rich editorial summaries.
+            normalized = lambda v: re.sub(r"[^\\w]+", "", v.lower())
+            headline = normalized(title.rsplit(" - ", 1)[0])
+            excerpt = normalized(descr)
+            if not descr or len(descr) < 70 or (headline and (excerpt.startswith(headline) or headline in excerpt)):
                 descr = ""
-            found.append(NewsItem(topic, title, descr, url, source[:70], d, viewpoint))
+            article = NewsItem(topic, title, descr, url, source[:70], d, viewpoint)
+            if is_significant(article):
+                found.append(article)
         except (ValueError, OverflowError, TypeError):
             continue
     return found
