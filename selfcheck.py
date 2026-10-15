@@ -10,9 +10,10 @@ from zoneinfo import ZoneInfo
 
 from direct_news import category, select_balanced
 from editorial import same_event
+from editorial_gate import is_publishable
 from news import NewsItem
 
-BUILD_ID = "2026.10.15-editorial-audit-2"
+BUILD_ID = "2026.10.15-editorial-audit-3"
 
 
 def run_selfcheck() -> str:
@@ -68,6 +69,30 @@ def run_selfcheck() -> str:
          category("В России запретят P2P-сделки с криптовалютой с июля 2027 года") == "Финансы и крипта")
     test("CVE классифицирован как кибербезопасность", lambda:
          category("Критическая уязвимость CVE-2026-12345 обнаружена в серверном ПО") == "Инфраструктура и безопасность")
+
+    def gate_item(topic: str, title: str) -> NewsItem:
+        return NewsItem(
+            topic, title,
+            "Свежая публикация с достаточным описанием для проверки тематической значимости.",
+            "https://example.org/item", "Test source", now,
+        )
+
+    test("ИИ-метки YouTube Music не VPN", lambda: not is_publishable(gate_item(
+        "Интернет и VPN", "YouTube Music начал внедрять ИИ-метки для музыкального контента")))
+    test("Экстрадиция не финансовая новость", lambda: not is_publishable(gate_item(
+        "Финансы и крипта", "В РФ экстрадировали совершившего незаконные валютные операции на 2,7 млрд рублей")))
+    test("OpenAI-криминал не IT-релиз", lambda: not is_publishable(gate_item(
+        "IT, облака и AI", "Туалетная бумага и прослушивающее устройство. Что известно об аресте инженера OpenAI?")))
+    test("Мнение об экономике ИИ не релиз", lambda: not is_publishable(gate_item(
+        "IT, облака и AI", "ВЭБ.РФ: Внедрение ИИ выведет экономику РФ на новый уровень роста")))
+    test("Идея ЦОД без строительства исключена", lambda: not is_publishable(gate_item(
+        "Инфраструктура и безопасность", "Правительство заинтересовалось переносом дата-центров в угольные регионы России")))
+    test("Microsoft Maia остаётся", lambda: is_publishable(gate_item(
+        "IT, облака и AI", "Microsoft представила XPU-ускоритель Maia 300 для инференса ИИ")))
+    test("Настоящий VPN-запрет остаётся", lambda: is_publishable(gate_item(
+        "Интернет и VPN", "Роскомнадзор ограничил работу VPN и мобильного интернета")))
+    test("Новости о критических CVE остаются", lambda: is_publishable(gate_item(
+        "Инфраструктура и безопасность", "Критическая уязвимость CVE-2026-12345 обнаружена в серверном ПО")))
 
     passed = sum(ok for _, ok, _ in results)
     lines = [
