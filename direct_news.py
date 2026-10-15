@@ -367,52 +367,107 @@ def _rank(item: NewsItem) -> tuple[int, float]:
 
 
 def select_balanced(items: list[NewsItem], max_items: int, seen: set[str], recent_events=()) -> list[NewsItem]:
-    by_topic = defaultdict(list)
-    keys = set(seen)
-    # Keep one representative per event, not one article per publisher.
-    # Remove low-value filler instead of forcing 20-30 entries.
-    # Filter eligibility BEFORE deduplication, so a poor first article cannot
-    # suppress a useful second article about the same event.
+    """Balance sections and sources without inventing or padding news.
+
+    Pass one favors source diversity. If fewer than 24 *good* stories remain,
+    pass two may admit additional independently titled stories from the same
+    publisher, but only if there is a substantive description and a higher
+    importance score. Neither pass bypasses the topic gate or event dedup.
+    """
+    capacity = {
+        "Липецк и Липецкая область": 5,
+        "Россия — главное": 5,
+        "Законы и правила": 4,
+        "Интернет и VPN": 5,
+        "Финансы и крипта": 5,
+        "СВО — позиции сторон": 4,
+        "Мир и экономика": 4,
+        "IT, облака и AI": 5,
+        "Инфраструктура и безопасность": 4,
+        "Игры на ПК": 3,
+    }
+    minimum = {
+        "Россия — главное": 4,
+        "Законы и правила": 4,
+        "Мир и экономика": 4,
+    }
+    # Filter BEFORE dedup: a low-quality item must not hide a better report
+    # of the same event from another publisher.
     eligible = [item for item in items if is_publishable(item)]
-    log.info("Editorial gate: %d/%d eligible", len(eligible), len(items))
-    for item in deduplicate(eligible):
-        if item.key in keys:
+    unique = deduplicate(eligible)
+    by_topic = defaultdict(list)
+    deferred = defaultdict(list)
+    source_counts = defaultdict(int)
+    kept_keys = set(seen)
+    excluded = 0
+
+    for item in unique:
+        topic = item.topic
+        if topic not in capacity or item.key in kept_keys:
             continue
         if recent_events and any(same_event(item, old) for old in recent_events):
             continue
-        # Do not publish military assertions as headline-only news.
-        if item.topic == "СВО — позиции сторон" and len(item.summary.strip()) < 35:
+        if topic == "СВО — позиции сторон" and len(item.summary.strip()) < 35:
             continue
-        if item.topic == "Инфраструктура и безопасность" and re.search(
+        if topic == "Инфраструктура и безопасность" and re.search(
             r"(?i)отч[её]т\s+о\s+динамике|предложил[а-я]*\s+размещать\s+дата-центр",
             item.title,
         ):
             continue
-        minimum = 4 if item.topic in ("Россия — главное", "Законы и правила", "Мир и экономика") else 2
-        if editorial_score(item) < minimum:
+        score = editorial_score(item)
+        if score < minimum.get(topic, 2):
+            excluded += 1
             continue
-        # Variety of independently published stories: prevent one outlet from
-        # filling whole national/war sections with opinion pieces.
-        if item.topic != "Липецк и Липецкая область":
-            if sum(entry.source == item.source for entry in by_topic[item.topic]) >= 2:
-                continue
-        keys.add(item.key)
-        by_topic[item.topic].append(item)
-    capacity = {
-        "Липецк и Липецкая область": 5, "Россия — главное": 4,
-        "Законы и правила": 3, "Интернет и VPN": 4,
-        "Финансы и крипта": 4, "СВО — позиции сторон": 3,
-        "Мир и экономика": 3, "IT, облака и AI": 4,
-        "Инфраструктура и безопасность": 3, "Игры на ПК": 2,
-    }
-    picked = []
-    # Ensure local news gets priority even if the feeds contain many national items.
-    for topic in TOPIC_ORDER:
-        for item in by_topic[topic][:capacity.get(topic, 3)]:
-            if len(picked) < max_items:
-                picked.append(item)
-    return picked[:max_items]
+        kept_keys.add(item.key)
+        pair = (topic, item.source)
+        if topic == "Липецк и Липецкая область" or source_counts[pair] < 2:
+            if len(by_topic[topic]) < capacity[topic]:
+                by_topic[topic].append(item)
+                source_counts[pair] += 1
+        else:
+            deferred[topic].append(item)
 
+    baseline = sum(len(x) for x in by_topic.values())
+    target = min(max_items, 24)
+    if baseline < target:
+        # Only relax source diversity, not editorial eligibility. This
+        # specifically recovers solid stories crowded out by 2/source limits.
+        extra = [item for topic in TOPIC_ORDER for item in deferred[topic]]
+        extra.sort(key=lambda item: (editorial_score(item), item.published.timestamp()), reverse=True)
+        for item in extra:
+            if sum(map(len, by_topic.values())) >= target:
+                break
+            topic = item.topic
+            if len(by_topic[topic]) >= capacity[topic]:
+                continue
+            if len(item.summary.strip()) < 90:
+                continue
+            if editorial_score(item) < max(5, minimum.get(topic, 2) + 1):
+                continue
+            pair = (topic, item.source)
+            if source_counts[pair] >= 4:
+                continue
+            by_topic[topic].append(item)
+            source_counts[pair] += 1
+
+    # Round robin: enough coverage for all useful sections, with local news
+    # receiving first pick. No category is forced to have an entry.
+    chosen = []
+    max_depth = max((len(v) for v in by_topic.values()), default=0)
+    for depth in range(max_depth):
+        for topic in TOPIC_ORDER:
+            if depth < len(by_topic[topic]):
+                chosen.append(by_topic[topic][depth])
+                if len(chosen) >= max_items:
+                    break
+        if len(chosen) >= max_items:
+            break
+    log.info(
+        "Editorial selection: raw=%d, gate=%d, unique=%d, scored_out=%d, "
+        "diversity_pass=%d, result=%d, target=%d",
+        len(items), len(eligible), len(unique), excluded, baseline, len(chosen), target
+    )
+    return chosen
 
 async def collect_news(client: httpx.AsyncClient, now: datetime, seen: set[str],
                        max_items: int = 28, recent_events=()) -> tuple[list[NewsItem], int]:
