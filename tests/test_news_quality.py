@@ -16,12 +16,14 @@ class NewsQualityTests(unittest.TestCase):
         self.assertTrue(has_details("В Липецке отключат воду", "Отключение затронет несколько адресов из-за ремонта трубопровода."))
 
     def test_direct_rss_retains_original_link(self):
-        xml = (b'<rss><channel><item><title>'
-               'В Липецке отключат холодную воду'.encode("utf-8")
-               + b'</title><link>https://example.com/news/123</link>'
-               + b'<pubDate>Thu, 15 Oct 2026 08:00:00 +0300</pubDate><description>'
-               + 'Из-за ремонта водопровода отключение затронет несколько улиц Липецка.'.encode("utf-8")
-               + b'</description></item></channel></rss>')
+        xml = (
+            '<rss><channel><item><title>'
+            'В Липецке отключат холодную воду'
+            '</title><link>https://example.com/news/123</link>'
+            '<pubDate>Thu, 15 Oct 2026 08:00:00 +0300</pubDate><description>'
+            'Из-за ремонта водопровода отключение затронет несколько улиц Липецка.'
+            '</description></item></channel></rss>'
+        ).encode("utf-8")
         data = rss_items(Feed("Publisher", "https://example.com/rss"), xml, NOW)
         self.assertEqual(len(data), 1)
         self.assertEqual(data[0].link, "https://example.com/news/123")
