@@ -3,4 +3,4 @@ python-dotenv>=1.0,<2
 Pillow>=10,<13
 
 beautifulsoup4>=4.12,<5
-googlenewsdecoder>=0.1.7,<1
+googlenewsdecoder==0.2.1
