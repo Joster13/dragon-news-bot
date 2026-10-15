@@ -158,16 +158,19 @@ async def enrich_articles(client: httpx.AsyncClient, items: list[NewsItem], max_
                 if len(response.content) > 1_500_000:
                     return None
                 body = description_from_html(response.text)
-                if len(body) < 95:
-                    return None
-                extract = short_extract(body)
-                if len(extract) < 65:
-                    return None
-                return replace(item, summary=extract, link=str(response.url))
+                if len(body) >= 95:
+                    extract = short_extract(body)
+                    if len(extract) >= 65:
+                        return replace(item, summary=extract, link=str(response.url))
+                if item.summary and len(item.summary) >= 95 and urlsplit(item.link).hostname != "news.google.com":
+                    return replace(item, link=str(response.url))
+                return None
             except (httpx.HTTPError, ValueError, UnicodeError):
+                if item.summary and len(item.summary) >= 95 and urlsplit(item.link).hostname != "news.google.com":
+                    return item
                 return None
 
     completed = await asyncio.gather(*(process(i) for i in items))
     ready = [x for x in completed if x is not None]
-    log.info("Enriched %d/%d candidate articles from publishers", len(ready), len(items))
+    log.info("Articles ready: %d/%d; Google URLs decoded: %d/%d", len(ready), len(items), len(decoded), len(google_links))
     return ready[:max_items]
