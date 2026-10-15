@@ -15,7 +15,7 @@ class DirectSourcesTest(unittest.TestCase):
     def test_local_utilities(self):
         self.assertEqual(category("В Липецке отключат холодную воду"), "Липецк и Липецкая область")
     def test_rss_direct_item(self):
-        data = b"""<rss><channel><item><title>В Липецке отключат холодную воду</title><link>https://example.org/article</link><pubDate>Thu, 15 Oct 2026 09:00:00 +0300</pubDate><description>В связи с ремонтными работами временно ограничено водоснабжение в нескольких домах города. Сроки уточняются у поставщика.</description></item></channel></rss>"""
+        data = """<rss><channel><item><title>В Липецке отключат холодную воду</title><link>https://example.org/article</link><pubDate>Thu, 15 Oct 2026 09:00:00 +0300</pubDate><description>В связи с ремонтными работами временно ограничено водоснабжение в нескольких домах города. Сроки уточняются у поставщика.</description></item></channel></rss>""".encode("utf-8")
         rows = rss_items(Feed("local","https://example.org/rss"), data, NOW)
         self.assertEqual(len(rows),1)
         self.assertEqual(rows[0].topic, "Липецк и Липецкая область")
