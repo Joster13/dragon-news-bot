@@ -117,11 +117,14 @@ NATIONAL_IMPORTANT = re.compile(
     re.I,
 )
 
+# Mentions of the Duma or State Council are not themselves legal developments.
 LAW = re.compile(
-    r"госдум|совет федерации|правительств[а-я ]+(?:принял|утвердил)|"
-    r"законопроект|федеральн[а-я ]+закон|налогов[а-я ]+вычет|"
+    r"законопроект|федеральн[а-я ]+закон|"
     r"постановлени[ея]|новы[а-я ]+правил[ао]|"
-    r"штраф[а-я]+|налогов[а-я ]+льгот",
+    r"госдум[а-я]*[а-я ,.]{0,35}(?:принял|приняла|одобрил|одобрила|"
+    r"рассмотрит|внесл|утверди)|"
+    r"правительств[а-я ]+(?:принял|приняло|утвердило|утвердил)|"
+    r"вступ[а-я ]+в\s+силу",
     re.I,
 )
 CYBER = re.compile(
@@ -176,6 +179,17 @@ def has_details(title: str, desc: str) -> bool:
 def category(title: str, description: str = "", forced: str = "") -> str | None:
     value = title.strip()
     if not value or NOISE.search(value):
+        return None
+    # Evergreen advice and political rhetoric are not newly enacted policies.
+    if re.search(
+        r"(?i)побед[а-я ]+.*(?:историческ|на\s+выборах)|"
+        r"россиянам\s+назвали\s+легальны[а-я ]+способ[а-я ]+сэкономить|"
+        r"назвали\s+основны[а-я ]+точк[а-я ]+роста|"
+        r"в\s+европарламенте\s+высказались|"
+        r"в\s+госдуме\s+прокомментировали\s+идею|"
+        r"совет[а-я ]+как\s+сэкономить",
+        value,
+    ):
         return None
     if forced == "Липецк и Липецкая область":
         if not LOCAL_IMPORTANT.search(value):
