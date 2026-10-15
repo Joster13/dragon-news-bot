@@ -104,7 +104,10 @@ class NewsBot:
                 return False
             self.last_attempt = now
             log.info("Gathering dated news for %s", day)
-            fresh, sources_available = await collect_news(self.client, now, self.db.seen(), MAX_ITEMS)
+            fresh, sources_available = await collect_news(
+                self.client, now, self.db.seen(), MAX_ITEMS,
+                recent_events=self.db.recent_events()
+            )
             fresh = await enrich_optional(self.client, fresh)
             if sources_available < 1:
                 if self.db.setting("rss_error_notice_day") != day:
@@ -134,7 +137,7 @@ class NewsBot:
                 rendered_chunk = rich_html(article_slice, now, summary_map)
                 await self.send_rich(ADMIN_ID, rendered_chunk, fallback_html(article_slice, now),
                                      keyboard if idx == len(chunks) - 1 else None)
-            self.db.record(day, export_markdown(fresh, now), [a.key for a in fresh])
+            self.db.record(day, export_markdown(fresh, now), [a.key for a in fresh], articles=fresh)
             log.info("Digest delivered for %s: %s items", day, len(fresh))
             return True
 
