@@ -173,7 +173,7 @@ async def collect_news(client: httpx.AsyncClient, now: datetime, seen: set[str],
     async def one(topic: str, query: str, take: int, viewpoint: str):
         async with limit:
             try:
-                r = await client.get(news_rss_url(query), timeout=18)
+                r = await client.get(news_rss_url(query), timeout=11)
                 r.raise_for_status()
                 return (topic, take, decode_feed(topic, viewpoint, r.content, now), True)
             except (httpx.HTTPError, ValueError) as e:
