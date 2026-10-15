@@ -112,6 +112,30 @@ class StandaloneRunnerTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(report["status"],"not_started")
             self.assertFalse(report["ready_for_review"])
 
+    async def test_preview_date_reads_saved_items_without_network(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path=str(Path(directory)/"dragon_news_shadow.sqlite3")
+            db=open_shadow_db(path)
+            with db:
+                db.execute("INSERT INTO digests(digest_id,day,cutoff_at,built_at,build_version,status,quality_note) VALUES(?,?,?,?,?,?,?)",
+                    ("shadow:2026-10-15","2026-10-15",START.isoformat(),START.isoformat(),"v2","READY",""))
+                db.execute("INSERT INTO events(event_id,event_key,headline,first_seen_at,last_seen_at,status) VALUES(?,?,?,?,?,?)",
+                    ("ev01","event:01","В Липецке изменили расписание транспорта",START.isoformat(),START.isoformat(),"single_attributed"))
+                db.execute("INSERT INTO digest_items(digest_id,event_id,position,rendered_text) VALUES(?,?,?,?)",
+                    ("shadow:2026-10-15","ev01",1,json.dumps({"headline":"В Липецке изменили расписание транспорта",
+                          "category":"Липецк и Липецкая область","source_urls":["https://tass.ru/123"],
+                          "facts":"Опубликовано новое расписание","evidence_status":"single_attributed"},ensure_ascii=False)))
+            db.close()
+            from io import StringIO
+            stream=StringIO()
+            with patch("sys.argv",["shadow_runner.py","--preview-date","2026-10-15","--db",path]):
+                with patch("sys.stdout",stream):
+                    await runner_main()
+            report=json.loads(stream.getvalue())
+            self.assertEqual(len(report["items"]),1)
+            self.assertEqual(report["items"][0]["source_urls"],["https://tass.ru/123"])
+            self.assertEqual(report["day"],"2026-10-15")
+
     async def test_run_mode_uses_no_telegram_token_and_single_workflow(self):
         with tempfile.TemporaryDirectory() as directory:
             path=str(Path(directory)/"dragon_news_shadow.sqlite3")
