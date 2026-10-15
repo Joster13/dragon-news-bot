@@ -23,6 +23,11 @@ class EventDedupTests(unittest.TestCase):
         self.assertEqual(len(deduplicate([tass, ria])), 1)
         self.assertEqual(len(select_balanced([tass, ria], 28, set())), 1)
 
+    def test_different_readings_are_distinct_events(self):
+        first = article("Госдума приняла в I чтении законопроект о статусе системы-112")
+        second = article("Госдума приняла во II чтении законопроект о статусе системы-112")
+        self.assertFalse(same_event(first, second))
+
     def test_different_tax_bills_remain_separate(self):
         one = article("Госдума приняла законопроект о расчёте НДФЛ при обмене недвижимости")
         two = article("Госдума одобрила законопроект о повышении НДС для предпринимателей")
