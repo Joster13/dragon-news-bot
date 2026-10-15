@@ -4,7 +4,7 @@ import asyncio
 import logging
 import os
 from pathlib import Path
-from .collector import run_collector_loop
+from .shadow_workflow import run_shadow_workflow
 from .db import open_shadow_db
 
 log=logging.getLogger(__name__)
@@ -31,7 +31,7 @@ def start_shadow_collector(existing_httpx_client, stop_event: asyncio.Event) -> 
     async def runner():
         db=open_shadow_db(path)
         try:
-            await run_collector_loop(existing_httpx_client,db,stop_event)
+            await run_shadow_workflow(existing_httpx_client,db,stop_event)
         finally:
             db.close()
 
