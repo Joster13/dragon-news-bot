@@ -336,14 +336,20 @@ def select_balanced(items: list[NewsItem], max_items: int, seen: set[str], recen
             continue
         if recent_events and any(same_event(item, old) for old in recent_events):
             continue
-        if editorial_score(item) < 2:
+        minimum = 4 if item.topic in ("Россия — главное", "Законы и правила", "Мир и экономика") else 2
+        if editorial_score(item) < minimum:
             continue
+        # Variety of independently published stories: prevent one outlet from
+        # filling whole national/war sections with opinion pieces.
+        if item.topic != "Липецк и Липецкая область":
+            if sum(entry.source == item.source for entry in by_topic[item.topic]) >= 2:
+                continue
         keys.add(item.key)
         by_topic[item.topic].append(item)
     capacity = {
         "Липецк и Липецкая область": 5, "Россия — главное": 4,
         "Законы и правила": 3, "Интернет и VPN": 4,
-        "Финансы и крипта": 4, "СВО — позиции сторон": 4,
+        "Финансы и крипта": 4, "СВО — позиции сторон": 3,
         "Мир и экономика": 3, "IT, облака и AI": 4,
         "Инфраструктура и безопасность": 3, "Игры на ПК": 2,
     }
