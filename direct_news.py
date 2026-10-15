@@ -20,7 +20,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from news import NewsItem, TOPIC_ORDER
-from editorial import deduplicate, editorial_score
+from editorial import deduplicate, editorial_score, same_event
 
 log = logging.getLogger("dragon-news.sources")
 
@@ -312,13 +312,15 @@ def _rank(item: NewsItem) -> tuple[int, float]:
     return score, item.published.timestamp()
 
 
-def select_balanced(items: list[NewsItem], max_items: int, seen: set[str]) -> list[NewsItem]:
+def select_balanced(items: list[NewsItem], max_items: int, seen: set[str], recent_events=()) -> list[NewsItem]:
     by_topic = defaultdict(list)
     keys = set(seen)
     # Keep one representative per event, not one article per publisher.
     # Remove low-value filler instead of forcing 20-30 entries.
     for item in deduplicate(items):
         if item.key in keys:
+            continue
+        if recent_events and any(same_event(item, old) for old in recent_events):
             continue
         if editorial_score(item) < 2:
             continue
@@ -341,7 +343,7 @@ def select_balanced(items: list[NewsItem], max_items: int, seen: set[str]) -> li
 
 
 async def collect_news(client: httpx.AsyncClient, now: datetime, seen: set[str],
-                       max_items: int = 28) -> tuple[list[NewsItem], int]:
+                       max_items: int = 28, recent_events=()) -> tuple[list[NewsItem], int]:
     sem = asyncio.Semaphore(6)
 
     async def fetch(feed: Feed):
@@ -361,7 +363,7 @@ async def collect_news(client: httpx.AsyncClient, now: datetime, seen: set[str],
               for name, items, status in fetched]
     reachable = sum(status == "OK" for _, _, status in fetched)
     all_items = [item for _, rows, _ in fetched for item in rows]
-    ready = select_balanced(all_items, max_items, seen)
+    ready = select_balanced(all_items, max_items, seen, recent_events)
     log.info("Direct news: reachable=%d/%d, relevant=%d, selected=%d",
              reachable, len(FEEDS), len(all_items), len(ready))
     return ready, reachable
