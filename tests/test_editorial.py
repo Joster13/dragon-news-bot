@@ -59,6 +59,27 @@ class EventDedupTests(unittest.TestCase):
                     topic="Финансы и крипта")
         self.assertEqual(select_balanced([a], 28, set()), [a])
 
+    def test_other_publisher_reprint_next_day_removed(self):
+        from types import SimpleNamespace
+        original = SimpleNamespace(
+            topic="Законы и правила",
+            title="ГД приняла в I чтении законопроект о правовом статусе централизованной системы-112")
+        reprint = article("Госдума одобрила проект о правовом статусе системы-112", "РИА Новости")
+        self.assertEqual(select_balanced([reprint], 28, set(), recent_events=[original]), [])
+
+    def test_storage_event_history(self):
+        import tempfile
+        from pathlib import Path
+        from storage import Storage
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Storage(str(Path(tmp) / "news.sqlite3"))
+            item = article("Госдума одобрила законопроект о статусе системы-112")
+            db.record("2026-10-15", "digest", [item.key], articles=[item])
+            recent = db.recent_events()
+            self.assertEqual(len(recent), 1)
+            self.assertEqual(recent[0].title, item.title)
+            db.conn.close()
+
     def test_previously_seen_item_not_emitted(self):
         a = article("Госдума приняла законопроект о расчете НДФЛ при обмене недвижимости")
         self.assertEqual(select_balanced([a], 28, {a.key}), [])
