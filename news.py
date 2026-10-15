@@ -111,9 +111,29 @@ def is_significant(item: NewsItem) -> bool:
     if item.topic == "Липецк и Липецкая область":
         if any(word in title for word in LOCAL_NOISE):
             return False
-        # No unrelated national headlines from a regional publisher.
-        return any(word in title for word in LOCAL_SIGNALS)
+        # A cultural event or ranking is not an essential regional update.
+        excluded = ("фестивал", "концерт", "спектакл", "выставк", "праздник",
+                    "рейтинг", "тройку лучших", "конкурс", "победител")
+        if any(word in title for word in excluded):
+            return False
+        if not any(word in title for word in LOCAL_SIGNALS):
+            return False
+        return any(word in title for word in IMPORTANT_LOCAL + (
+            "здравоохран", "больниц", "стройк", "ремонт", "транспорт",
+            "зарплат", "занятост", "инвестиц", "рабочих мест", "социальн",
+            "бюджет", "цены", "электроснабжен"
+        ))
+    if item.topic == "Интернет и VPN":
+        # "Блокировка грузовика" is not an internet restriction.
+        technical = ("vpn", "vless", "wireguard", "telegram", "телеграм",
+                     "роскомнадзор", "ркн", "тспу", "dpi", "youtube",
+                     "ютуб", "провайдер", "оператор связи", "мобильн",
+                     "интернет", "сеть", "мессенджер", "сайт",
+                     "домен", "ip-адрес", "протокол", "cloudflare", "приложен")
+        return any(word in title for word in technical)
     if item.topic in ("IT, облака и AI", "Игры на ПК") and any(w in title for w in PROMOTIONAL):
+        return False
+    if item.topic == "IT, облака и AI" and any(w in title for w in ("забираем", "прямо сейчас", "халява", "бесплатные токены")):
         return False
     if item.topic == "Россия — главное" and ("что будет" in title or "если " in title):
         return False
