@@ -13,7 +13,7 @@ from editorial import same_event
 from editorial_gate import is_publishable
 from news import NewsItem
 
-BUILD_ID = "2026.10.15-editorial-audit-3"
+BUILD_ID = "2026.10.15-editorial-audit-4"
 
 
 def run_selfcheck() -> str:
@@ -93,6 +93,30 @@ def run_selfcheck() -> str:
         "Интернет и VPN", "Роскомнадзор ограничил работу VPN и мобильного интернета")))
     test("Новости о критических CVE остаются", lambda: is_publishable(gate_item(
         "Инфраструктура и безопасность", "Критическая уязвимость CVE-2026-12345 обнаружена в серверном ПО")))
+
+    sample_description = (
+        "Публикация содержит подтверждённые детали изменений, сроки, "
+        "условия и факты, которые непосредственно затрагивают банковские операции."
+    )
+    finance_titles = [
+        "ЦБ снизил ключевую ставку по решению совета директоров",
+        "Банк увеличил проценты по вкладам для клиентов",
+        "В России запретили P2P-переводы без идентификации клиента",
+        "Банки ограничили снятие наличных с новых счетов",
+    ]
+    finance_examples = [
+        NewsItem("Финансы и крипта", title, sample_description,
+                 "https://example.org/" + str(i), "Интерфакс", now)
+        for i, title in enumerate(finance_titles)
+    ]
+    test("Больше двух важных новостей одного СМИ", lambda:
+         len(select_balanced(finance_examples, 28, set())) == 4)
+    sparse = finance_examples[:2] + [
+        NewsItem(item.topic, item.title, "", item.link, item.source, item.published)
+        for item in finance_examples[2:]
+    ]
+    test("Без описания не заполнять объём", lambda:
+         len(select_balanced(sparse, 28, set())) == 2)
 
     passed = sum(ok for _, ok, _ in results)
     lines = [
