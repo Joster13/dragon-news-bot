@@ -5,7 +5,7 @@ from collections import defaultdict
 from datetime import datetime
 from html import escape
 
-from news import NewsItem, TOPIC_ORDER, IMPACT
+from news import NewsItem, TOPIC_ORDER
 
 
 def e(value: str) -> str:
@@ -41,25 +41,21 @@ def rich_html(news: list[NewsItem], moment: datetime, summary_map: dict[str, tup
         if not section:
             parts.append("<p>Значимых свежих публикаций за период в доступных источниках не найдено.</p>")
         for index, article in enumerate(section, 1):
-            summary, consequence = summaries.get(article.key, (article.summary, IMPACT.get(topic, "")))
-            summary = summary or "В доступной ленте есть только заголовок: сведения требуют проверки в первоисточнике."
+            summary, consequence = summaries.get(article.key, (article.summary, ""))
             label = f"{index}. {article.title.rsplit(' - ', 1)[0]}"
             parts.append(f"<h3>{e(label)}</h3>")
             parts.append(f"<p><i>{e(article.published.strftime('%d.%m, %H:%M МСК'))}" +
                          (f" · {e(article.viewpoint)}" if article.viewpoint else "") + "</i></p>")
-            parts.append(f"<p>{e(summary[:950])}</p>")
+            if summary:
+                parts.append(f"<p>{e(summary[:950])}</p>")
+            else:
+                parts.append("<p><i>В открытой ленте нет содержательного описания; подробности по ссылке на источник.</i></p>")
             if consequence:
                 parts.append(f"<p><b>Почему важно:</b> {e(consequence[:650])}</p>")
             parts.append(f'<p><a href="{e(article.link)}">Источник: {e(article.source)}</a></p>')
         parts.append("</details>")
         parts.append("<hr/>")
-    parts.extend([
-        "<h2>Что проверить сегодня</h2>",
-        "<ul><li>Липецк: учитывать местные ограничения и адреса отключений из источников.</li>",
-        "<li>Финансы: перепроверять даты вступления законов в силу и условия банков.</li>",
-        "<li>VPN/IT: проверять критические изменения по официальным сообщениям.</li></ul>",
-        "<footer>Публикации отобраны автоматически. Перепроверяйте важные утверждения в первоисточнике.</footer>",
-    ])
+    parts.append("<footer>Автоматический обзор по публичным лентам. Дата из RSS может отличаться от даты события. Сверяйте важные сведения с первоисточником.</footer>")
     return "\n".join(parts)
 
 
