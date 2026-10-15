@@ -94,6 +94,20 @@ class SourceRegistryTests(unittest.TestCase):
         self.assertEqual(result.status,'single_attributed')
         self.assertIn('origin_unverified',result.reason_codes)
 
+    def test_local_editorial_hint_applies_only_to_likely_local_service_alerts(self):
+        from dragon_news_v2.evidence import EvidenceAssessment
+        alert=article('road','lipetsktop1','На улице Советской перекрыли дорогу из-за ремонта')
+        g=EventGroup('local-road','',(alert.article_id,),alert.title,
+                     'Липецк и Липецкая область',alert.published_at,alert.excerpt)
+        evidence=EvidenceAssessment('single_attributed',('unverified',),('origin_unverified',))
+        included=evaluate_event(g,evidence,NOW)
+        self.assertTrue(included.include)
+        self.assertEqual(included.category,'Липецк и Липецкая область')
+        self.assertEqual(included.evidence_status,'single_attributed')
+        other=replace(g,event_key='elsewhere',title='В Москве перекрыли дорогу из-за ремонта')
+        self.assertNotEqual(evaluate_event(other,evidence,NOW).category,
+                            'Липецк и Липецкая область')
+
     def test_habr_rss_reprint_does_not_count_as_independent(self):
         title='В Linux исправили критическую уязвимость CVE-2026-12345'
         rss=article('rss','habr',title,'https://habr.com/ru/news/123/')
