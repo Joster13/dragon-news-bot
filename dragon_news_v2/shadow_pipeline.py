@@ -68,20 +68,25 @@ def _stored_result(db: sqlite3.Connection, day: str) -> ShadowBuildResult | None
     return ShadowBuildResult(row[0], row[1], row[2], row[3], False, row[4]) if row else None
 
 
-def _load_candidate_articles(db: sqlite3.Connection, cutoff: datetime) -> dict[str, Article]:
+def _load_candidate_articles(db: sqlite3.Connection, cutoff: datetime,
+                             observed_until: datetime) -> dict[str, Article]:
     # Three days of context allows a syndicated reprint to match an old event.
+    # SQLite julianday normalizes mixed timezone offsets, unlike string comparison.
     start = (cutoff - timedelta(hours=72)).isoformat()
     end = cutoff.isoformat()
+    observed = observed_until.isoformat()
     rows = db.execute(
         """SELECT article_id,source_id,canonical_url,title,excerpt,
                   published_at,fetched_at,event_time,raw_fingerprint
            FROM articles
-           WHERE fetched_at <= ?
-             AND ((published_at >= ? AND published_at < ?)
-                  OR (published_at IS NULL AND fetched_at >= ?))
-           ORDER BY COALESCE(published_at,fetched_at),article_id
+           WHERE julianday(fetched_at) <= julianday(?)
+             AND ((julianday(published_at) >= julianday(?)
+                   AND julianday(published_at) < julianday(?))
+                  OR (published_at IS NULL
+                      AND julianday(fetched_at) >= julianday(?)))
+           ORDER BY julianday(COALESCE(published_at,fetched_at)),article_id
            LIMIT 2500""",
-        (end, start, end, start),
+        (observed, start, end, start),
     ).fetchall()
     def parse(value: str | None) -> datetime | None:
         return datetime.fromisoformat(value) if value else None
@@ -112,7 +117,7 @@ def _coverage_note(db: sqlite3.Connection, cutoff: datetime) -> tuple[str, bool]
 
 
 def build_shadow_digest(db: sqlite3.Connection, cutoff_at: datetime,
-                        max_items: int=28) -> ShadowBuildResult:
+                        max_items: int=28, observed_until: datetime | None=None) -> ShadowBuildResult:
     """Persist an immutable daily preview and editorial audit transactionally."""
     if cutoff_at.tzinfo is None:
         raise ValueError("Timezone-aware digest cutoff required")
@@ -125,7 +130,10 @@ def build_shadow_digest(db: sqlite3.Connection, cutoff_at: datetime,
     if cached:
         return cached
 
-    articles = _load_candidate_articles(db, cutoff)
+    observed = observed_until or cutoff
+    if observed.tzinfo is None or observed < cutoff:
+        raise ValueError("Observed timestamp must follow the cutoff and have a timezone")
+    articles = _load_candidate_articles(db, cutoff, observed)
     grouped = group_articles(list(articles.values()))
     groups = {g.event_key: g for g in grouped}
     evidence = {g.event_key: assess_evidence(g, articles, {}) for g in grouped}
