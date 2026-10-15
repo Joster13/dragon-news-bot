@@ -60,6 +60,25 @@ class WorkflowTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(again.digest)
         self.assertEqual(self.db.execute("SELECT count(*) FROM digests").fetchone()[0],1)
 
+    async def test_incomplete_nine_am_digest_recovers_before_noon(self):
+        await self.client.aclose()
+        self.client=httpx.AsyncClient(transport=httpx.MockTransport(lambda req: httpx.Response(503)))
+        morning=await run_shadow_cycle(self.client,self.db,(SOURCE,),DAY)
+        self.assertEqual(morning.digest.status,"INCOMPLETE")
+        self.assertEqual(morning.digest.item_count,0)
+        await self.client.aclose()
+        self.client=httpx.AsyncClient(transport=httpx.MockTransport(lambda req: httpx.Response(200,content=RSS)))
+        recovered=await run_shadow_cycle(self.client,self.db,(SOURCE,),DAY.replace(hour=10))
+        self.assertIsNotNone(recovered.digest)
+        self.assertEqual(recovered.digest.status,"READY")
+        self.assertEqual(recovered.digest.item_count,1)
+        self.assertEqual(self.db.execute("SELECT count(*) FROM digests").fetchone()[0],1)
+        self.assertEqual(self.db.execute("SELECT count(*) FROM digest_items").fetchone()[0],1)
+        self.assertEqual(self.db.execute("SELECT count(*) FROM delivery_outbox").fetchone()[0],0)
+        self.assertEqual(get_shadow_digest(self.db,"2026-10-15")["status"],"READY")
+        again=await run_shadow_cycle(self.client,self.db,(SOURCE,),DAY.replace(hour=11))
+        self.assertIsNone(again.digest)
+
     async def test_no_publishing_early_or_after_noon(self):
         before=await run_shadow_cycle(self.client,self.db,(SOURCE,),DAY.replace(hour=8,minute=59))
         self.assertIsNone(before.digest)
