@@ -50,7 +50,12 @@ NOISE = re.compile(
     r"рецепт|кулинар|театральн|актрис|певиц|топ[- ]?10|"
     r"дтп|столкновени[ея] автомобил|дорожн[а-я ]+авари[яю]|"
     r"задержан водитель|разбил машин|пьяный водитель|"
-    r"какое решение примет|что будет, если|что будет если",
+    r"какое решение примет|что будет, если|что будет если|"
+    r"авари[яи].*(?:автомобил|машин|водител|ваз|лада|ауди)|"
+    r"(?:автомобил|машин).*(?:врезал|столкнул|сбил)|"
+    r"врезал[а-я ]+в[а-я ]+(?:автомобил|машин)|"
+    r"раскритиковал|прокомментировал идею|"
+    r"высказался об инициативе|оппозици[яю].*агитк",
     re.I,
 )
 LOCAL = re.compile(
@@ -59,7 +64,8 @@ LOCAL = re.compile(
     re.I,
 )
 LOCAL_IMPORTANT = re.compile(
-    r"вод[а-я]+|отключ|отоплен|электр|аварийн|школ|больниц|"
+    r"водоснабж|водопровод|водоканал|без воды|подач[а-я ]+воды|"
+    r"отключ|отоплен|электр|аварийн|школ|больниц|"
     r"дорог|транспорт|перекры|ремонт|бпла|сирен|опасност|"
     r"пожар на завод|льгот|выплат|зарплат|тариф|цен[аы]|"
     r"трудоустрой|предприяти|производств|налог|связь|интернет|"
@@ -75,13 +81,35 @@ VPN = re.compile(
     r"интернет[- ]?провайдер|протокол[а-я ]+связи",
     re.I,
 )
+# Financial classification must not be triggered solely by "рублей" in
+# procurement figures or "ЦБ" commenting on agriculture.
 FINANCE = re.compile(
-    r"\bЦБ\b|центробанк|банк[а-я]*|ставк[а-я]*|вклад[а-я]*|"
-    r"рубл[а-я]*|ипотек[а-я]*|инфляц[а-я]*|"
-    r"бирж[а-я]*|криптовалют|USDT|P2P|"
-    r"денежн[а-я ]+перевод|наличн[а-я]*|финансов[а-я]*",
+    r"\\bбанк(?:и|ов|ах|ам|а|е|ом|овский|овские|овскую)?\\b|"
+    r"банковск|центробанк|\\bЦБ\\b|"
+    r"ключев[а-я ]+ставк|процентн[а-я ]+ставк|"
+    r"вклад[а-я]*|депозит[а-я]*|кредит[а-я]*|ипотек[а-я]*|"
+    r"инфляц[а-я]*|бирж[а-я]*|криптовалют|"
+    r"биткоин|\\bBTC\\b|\\bUSDT\\b|\\bP2P\\b|"
+    r"денежн[а-я ]+перевод|банковск[а-я ]+перевод|"
+    r"финансов[а-я]*|валютн[а-я]*|курс[а-я ]+рубл",
     re.I,
 )
+FINANCE_SUBJECT = re.compile(
+    r"ставк|вклад|депозит|кредит|ипотек|инфляц|денежн|"
+    r"рубл|финанс|плат[её]ж|перевод|инвест|валют|"
+    r"банков|бирж|сбережен|процент",
+    re.I,
+)
+NATIONAL_IMPORTANT = re.compile(
+    r"правительств|минфин|минпромторг|экономик|"
+    r"производств|энергетик|экспорт|импорт|"
+    r"бюджет|тариф|отрасл|инфраструктур|"
+    r"реформ|завод|строител|занятост|"
+    r"налог|зарплат|жиль|топлив|"
+    r"постановлен|утвердил|государственн[а-я ]+программ",
+    re.I,
+)
+
 LAW = re.compile(
     r"госдум|совет федерации|правительств[а-я ]+(?:принял|утвердил)|"
     r"законопроект|федеральн[а-я ]+закон|налогов[а-я ]+вычет|"
@@ -148,26 +176,31 @@ def category(title: str, description: str = "", forced: str = "") -> str | None:
         return forced
     if LOCAL.search(value):
         return "Липецк и Липецкая область" if LOCAL_IMPORTANT.search(value) else None
-    if VPN.search(value):
-        return "Интернет и VPN"
-    if FINANCE.search(value):
-        return "Финансы и крипта"
-    if LAW.search(value):
-        return "Законы и правила"
-    if CYBER.search(value):
-        return "Инфраструктура и безопасность"
+    # Direct evidence of war takes precedence over names of politicians,
+    # potential sanctions and Russian/US foreign-policy keywords.
     if WAR.search(value):
         return "СВО — позиции сторон"
+    if VPN.search(value):
+        return "Интернет и VPN"
+    if LAW.search(value):
+        return "Законы и правила"
+    if FINANCE.search(value):
+        # The central bank can also report on agricultural production.
+        central_only = re.search(r"\\bЦБ\\b|центробанк", value, re.I)
+        if not central_only or FINANCE_SUBJECT.search(value):
+            return "Финансы и крипта"
+    if CYBER.search(value):
+        return "Инфраструктура и безопасность"
+    if GAMES.search(value):
+        return "Игры на ПК"
     if IT.search(value):
-        # No articles advertising free AI subscriptions/tokens.
         if re.search(r"скидк|промокод|даром|бесплатн[а-я ]+токен", value, re.I):
             return None
         return "IT, облака и AI"
-    if re.search(r"Steam|релиз видеоигр|релиз игры|игр[аы] на ПК", value, re.I):
-        return "Игры на ПК"
     if WORLD.search(value):
         return "Мир и экономика"
-    if RUSSIA.search(value):
+    # The word "Russia" alone is not newsworthy.
+    if RUSSIA.search(value) and NATIONAL_IMPORTANT.search(value):
         return "Россия — главное"
     return None
 
