@@ -60,12 +60,19 @@ NOISE = re.compile(
     r"раскритиковал|прокомментировал идею|"
     r"высказался об инициативе|оппозици[яю].*агитк|"
     r"\bпредр[её]к\b|\bпредсказал\b|\bвклад\b.{0,60}первичн|"
-    r"(?:^|\b)(?:\\d+|пять|семь)\\s+статей\\s+(?:октября|недели|месяца)|"
-    r"психологи[яи]\\s+реклам[ыа]|обзор\\s+статей|"
+    r"(?:^|\b)(?:\d+|пять|семь)\s+статей\s+(?:октября|недели|месяца)|"
+    r"психологи[яи]\s+реклам[ыа]|обзор\s+статей|"
     r"эксперты рассказали[,]? запретят ли|"
-    r"предложили размещать дата-центры в отработанных",
+    r"предложили размещать дата-центры в отработанных|"
+    r"книг[аиуы]\s+в\s+Британию|книжны[а-я ]+магазин|"
+    r"писательниц[аы].*книг|"
+    r"воскрешени[ея].*умерших\s+акт[её]р|"
+    r"акт[её]р[а-я]*\s+с\s+помощью\s+ИИ|"
+    r"в\s+России\s+предложили\s+возводить\s+дата-центр|"
+    r"(?:классическ[а-я ]+квест|квест.{0,60}1999\s+год)",
     re.I,
 )
+
 LOCAL = re.compile(
     r"липецк|липецк[а-я]+ област|елец|гряз[а-я]+|данков|"
     r"усман|лебедян|задонск|чаплыгин|тербун|хлевн",
@@ -210,14 +217,22 @@ def category(title: str, description: str = "", forced: str = "") -> str | None:
         return forced
     if LOCAL.search(value):
         return "Липецк и Липецкая область" if LOCAL_IMPORTANT.search(value) else None
-    # Direct evidence of war takes precedence over names of politicians,
-    # potential sanctions and Russian/US foreign-policy keywords.
-    if WAR.search(value) and not re.search(r"(?i)\b(?:ГУП|МУП)(?:ов|ы|ам)?\b|госпошлин|недвижимост", value):
+    # Policy for veterans/families is social legislation, not a combat update.
+    if re.search(r"(?i)льгот|пошлин|налог|соц(?:иальн)?[а-я ]+выплат|пенси", value) and re.search(
+        r"(?i)\bСВО\b|ветеран|вдов|военнослужащ|мобилизованн", value
+    ):
+        return "Законы и правила"
+    if LAW.search(value):
+        return "Законы и правила"
+    # Starlink / Starshield coverage may omit Ukraine from the headline.
+    if re.search(r"(?i)starshield|starlink", value) and re.search(
+        r"(?i)украин|\bВСУ\b|на\s+фронте|военн[а-я ]+использован", description
+    ):
+        return "СВО — позиции сторон"
+    if WAR.search(value):
         return "СВО — позиции сторон"
     if VPN.search(value):
         return "Интернет и VPN"
-    if LAW.search(value):
-        return "Законы и правила"
     if FINANCE.search(value):
         # The central bank can also report on agricultural production.
         central_only = re.search(r"\bЦБ\b|центробанк", value, re.I)
