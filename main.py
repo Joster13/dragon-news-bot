@@ -178,6 +178,7 @@ class NewsBot:
             await self.text(chat_id, "🐉 DRAGON NEWS · личный дайджест\n\n"
                              f"Автоматически каждый день в {HOUR:02d}:{MINUTE:02d} МСК.\n"
                              "/today — отправить свежую сводку сейчас (один раз в день)\n"
+                             "/preview — проверить новости без записи в историю\n"
                              "/demo — посмотреть новый формат Rich Messages\n"
                              "/export — получить предыдущую сводку .md\n"
                              "/rates — график USD / EUR / CNY по данным ЦБ\n"
@@ -193,6 +194,18 @@ class NewsBot:
                              f"OpenAI API: {'подключён' if os.getenv('OPENAI_API_KEY') else 'не подключён (RSS-режим)'}")
         elif command == "/today":
             await self.digest(manual=True)
+        elif command == "/preview":
+            # Repeatable review; does not mark news as delivered.
+            async with self.lock:
+                now = datetime.now(TZ)
+                fresh, sources_available = await collect_news(self.client, now, set(), min(MAX_ITEMS, 12))
+                if sources_available < 3:
+                    await self.text(chat_id, "Новостные ленты временно недоступны. Попробуй /preview позже.")
+                elif not fresh:
+                    await self.text(chat_id, "Свежих публикаций для предпросмотра пока нет.")
+                else:
+                    summaries = await explain_with_ai(self.client, fresh)
+                    await self.send_rich(chat_id, rich_html(fresh, now, summaries), fallback_html(fresh, now))
         elif command == "/export":
             await self.export(chat_id)
         elif command == "/rates":
