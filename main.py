@@ -20,6 +20,7 @@ from news import NewsItem
 from direct_news import collect_news, enrich_optional, source_report
 from rendering import export_markdown, fallback_html, rich_html
 from storage import Storage
+from dragon_news_v2.integration import shadow_enabled, start_shadow_collector
 from selfcheck import BUILD_ID, run_selfcheck
 
 load_dotenv()
@@ -363,9 +364,17 @@ class NewsBot:
             {"command": "rates", "description": "График валют ЦБ РФ"},
         ]})
         log.info("Dragon News running build=%s (ADMIN_ID configured: %s)", BUILD_ID, bool(ADMIN_ID))
+        shadow_stop = asyncio.Event()
+        shadow_task = None
         try:
+            if shadow_enabled():
+                shadow_task = start_shadow_collector(self.client, shadow_stop)
             await asyncio.gather(self.listen(), self.scheduler())
         finally:
+            shadow_stop.set()
+            if shadow_task is not None:
+                shadow_task.cancel()
+                await asyncio.gather(shadow_task, return_exceptions=True)
             await self.client.aclose()
 
 

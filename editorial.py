@@ -89,7 +89,7 @@ def _legislative_stage(headline: str) -> str:
 
 def _bill_id(item) -> set[str]:
     """Bill numbers in title/description can identify different legislative acts."""
-    content = item.title + " " + (item.summary or "")
+    content = item.title + " " + (getattr(item, "summary", "") or "")
     return set(re.findall(r"(?<!\d)\d{5,}-\d{1,3}(?!\d)", content))
 
 
@@ -99,7 +99,7 @@ def _legislative_topic(item) -> str:
     This map only applies to one reading-stage and public funding context;
     it is not a generic claim that all fisheries bills concern one event.
     """
-    content = (item.title + " " + (item.summary or "")).lower()
+    content = (item.title + " " + (getattr(item, "summary", "") or "")).lower()
     if re.search(r"рыб|лосос|форел|аквакультур|рыбовод", content):
         if re.search(r"госзадан|государственн[а-я ]+задан|"
                      r"подведомственн[а-я ]+росрыболов", content):

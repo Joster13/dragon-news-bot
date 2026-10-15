@@ -70,3 +70,21 @@ python -m unittest discover -s tests -v
 Official Telegram: https://telegram.org/blog/communities-editor-invisible-messages and https://core.telegram.org/bots/api#rich-messages
 
 BotHost documentation: https://bothost.ru/docs/getting-started and https://bothost.ru/docs/
+
+
+## Dragon News 2.0 — shadow collector (experimental)
+
+This feature exists only in the draft feature branch. Creating a PR does not deploy it.
+The legacy Telegram commands, Rich Messages and 09:00 Moscow scheduler are unchanged.
+
+- V2_SHADOW_ENABLED=false (default): no shadow database opens and no collector starts.
+- V2_SHADOW_ENABLED=true: an hourly collector runs inside the existing bot process and uses its HTTP client; no second Telegram poller.
+- V2_DB_PATH=/app/data/dragon_news_shadow.sqlite3: a separate SQLite file; the integration rejects production DB_PATH.
+
+Before enabling on BotHost, back up and verify /app/data/dragon_news.sqlite3 using SQLite Backup API.
+GitHub cannot access or back up the live BotHost /app/data disk.
+Never commit tokens, SQLite databases or private data to this public repository.
+Do not merge this draft PR or modify AUTO_SEND for v2: shadow mode collects only.
+
+Offline checks: python -m compileall -q . ; python -m unittest discover -s tests -v.
+Real feed reachability must be tested later from the BotHost network.
