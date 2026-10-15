@@ -100,6 +100,12 @@ FINANCE_SUBJECT = re.compile(
     r"банков|бирж|сбережен|процент",
     re.I,
 )
+FINANCE_CONTEXT = re.compile(
+    r"криптовалют|\bP2P\b|\bUSDT\b|банковск|"
+    r"денежн[а-я ]+перевод|валютн[а-я]*|плат[её]ж[а-я]*|"
+    r"кредит[а-я]*|вклад[а-я]*|банк[а-я]*",
+    re.I,
+)
 NATIONAL_IMPORTANT = re.compile(
     r"правительств|минфин|минпромторг|экономик|"
     r"производств|энергетик|экспорт|импорт|"
@@ -189,6 +195,10 @@ def category(title: str, description: str = "", forced: str = "") -> str | None:
         central_only = re.search(r"\bЦБ\b|центробанк", value, re.I)
         if not central_only or FINANCE_SUBJECT.search(value):
             return "Финансы и крипта"
+    # A generic headline like "В России запретят один вид сделок" can
+    # still be classified from a substantive publisher description.
+    if re.search(r"сделк|перевод|плат[её]ж|огранич|запрет", value, re.I) and FINANCE_CONTEXT.search(description):
+        return "Финансы и крипта"
     if CYBER.search(value):
         return "Инфраструктура и безопасность"
     if GAMES.search(value):
