@@ -153,7 +153,8 @@ IT = re.compile(
     r"OpenAI|ChatGPT|Google|Microsoft|Windows|"
     r"Яндекс|нейросет|искусственн[а-я ]+интеллект|"
     r"\bИИ\b|\bAI\b|облачн[а-я ]+сервис|"
-    r"процессор|видеокарт|NVIDIA|AMD|Intel|"
+    r"процессор|видеокарт|NVIDIA|\bAMD\b|\bIntel\b|"
+    r"Apple Intelligence|\bApple\b.{0,24}\bAI\b|"
     r"Linux|платформ[а-я ]+разработ",
     re.I,
 )
