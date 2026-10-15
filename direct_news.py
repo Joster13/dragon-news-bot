@@ -56,7 +56,12 @@ NOISE = re.compile(
     r"(?:автомобил|машин).*(?:врезал|столкнул|сбил)|"
     r"врезал[а-я ]+в[а-я ]+(?:автомобил|машин)|"
     r"раскритиковал|прокомментировал идею|"
-    r"высказался об инициативе|оппозици[яю].*агитк",
+    r"высказался об инициативе|оппозици[яю].*агитк|"
+    r"\bпредр[её]к\b|\bпредсказал\b|\bвклад\b.{0,60}первичн|"
+    r"(?:^|\b)(?:\\d+|пять|семь)\\s+статей\\s+(?:октября|недели|месяца)|"
+    r"психологи[яи]\\s+реклам[ыа]|обзор\\s+статей|"
+    r"эксперты рассказали[,]? запретят ли|"
+    r"предложили размещать дата-центры в отработанных",
     re.I,
 )
 LOCAL = re.compile(
@@ -88,7 +93,7 @@ FINANCE = re.compile(
     r"\bбанк(?:и|ов|ах|ам|а|е|ом|овский|овские|овскую)?\b|"
     r"банковск|центробанк|\bЦБ\b|"
     r"ключев[а-я ]+ставк|процентн[а-я ]+ставк|"
-    r"вклад[а-я]*|депозит[а-я]*|кредит[а-я]*|ипотек[а-я]*|"
+    r"(?<![а-яё])вклад(?:ы|ов|ах|ами|а|е|ом)?\b|депозит[а-я]*|кредит[а-я]*|ипотек[а-я]*|"
     r"инфляц[а-я]*|бирж[а-я]*|криптовалют|"
     r"биткоин|\bBTC\b|\bUSDT\b|\bP2P\b|"
     r"денежн[а-я ]+перевод|банковск[а-я ]+перевод|"
@@ -104,7 +109,8 @@ FINANCE_SUBJECT = re.compile(
 FINANCE_CONTEXT = re.compile(
     r"криптовалют|\bP2P\b|\bUSDT\b|банковск|"
     r"денежн[а-я ]+перевод|валютн[а-я]*|плат[её]ж[а-я]*|"
-    r"кредит[а-я]*|вклад[а-я]*|банк[а-я]*",
+    r"кредит[а-я]*|(?<![а-яё])вклад(?:ы|ов|ах|ами|а|е|ом)?\b|"
+    r"(?<![а-яё])банк(?:и|ов|ах|ам|а|е|ом|овский|овские)?\b",
     re.I,
 )
 NATIONAL_IMPORTANT = re.compile(
@@ -149,7 +155,7 @@ WORLD = re.compile(
     re.I,
 )
 WAR = re.compile(
-    r"Украин|СВО|ВСУ|Минобороны РФ|фронт|"
+    r"Украин|\bСВО\b|\bВСУ\b|Минобороны РФ|фронт|"
     r"военн[а-я ]+операц|беспилотник|БПЛА|"
     r"прекращени[ея] огня|мирн[а-я ]+переговор",
     re.I,
@@ -191,6 +197,10 @@ def category(title: str, description: str = "", forced: str = "") -> str | None:
         value,
     ):
         return None
+    # Financial and war keywords must denote an actual subject, not be
+    # character substrings inside unrelated Russian words.
+    if re.search(r"(?i)\bпауэрбанк(?:и|ов|ам|ах)?\b", value):
+        return None
     if forced == "Липецк и Липецкая область":
         if not LOCAL_IMPORTANT.search(value):
             return None
@@ -199,7 +209,7 @@ def category(title: str, description: str = "", forced: str = "") -> str | None:
         return "Липецк и Липецкая область" if LOCAL_IMPORTANT.search(value) else None
     # Direct evidence of war takes precedence over names of politicians,
     # potential sanctions and Russian/US foreign-policy keywords.
-    if WAR.search(value):
+    if WAR.search(value) and not re.search(r"(?i)\b(?:ГУП|МУП)(?:ов|ы|ам)?\b|госпошлин|недвижимост", value):
         return "СВО — позиции сторон"
     if VPN.search(value):
         return "Интернет и VPN"
