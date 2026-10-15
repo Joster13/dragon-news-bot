@@ -15,6 +15,7 @@ import httpx
 from dotenv import load_dotenv
 
 from ai import explain_with_ai
+from article_content import enrich_articles
 from finance import chart_png, fetch_cbr_history, SOURCE_URL
 from news import NewsItem, collect_news
 from rendering import export_markdown, fallback_html, rich_html
@@ -103,7 +104,8 @@ class NewsBot:
                 return False
             self.last_attempt = now
             log.info("Gathering dated news for %s", day)
-            fresh, sources_available = await collect_news(self.client, now, self.db.seen(), MAX_ITEMS)
+            candidates, sources_available = await collect_news(self.client, now, self.db.seen(), min(65, MAX_ITEMS * 3))
+            fresh = await enrich_articles(self.client, candidates, MAX_ITEMS)
             if sources_available < 3:
                 if self.db.setting("rss_error_notice_day") != day:
                     await self.text(ADMIN_ID, "Не удалось подключиться к достаточному количеству новостных лент. "
@@ -143,8 +145,9 @@ class NewsBot:
                 now = datetime.now(TZ)
                 log.info("Preview started for %s", now.date())
                 fresh, sources_available = await asyncio.wait_for(
-                    collect_news(self.client, now, set(), min(MAX_ITEMS, 12)), timeout=58
+                    collect_news(self.client, now, set(), 32), timeout=58
                 )
+                fresh = await asyncio.wait_for(enrich_articles(self.client, fresh, 12), timeout=65)
                 if sources_available < 3:
                     await self.text(chat_id, "Не удалось получить новости: доступны менее трёх RSS-лент. Попробуй позже.")
                 elif not fresh:
