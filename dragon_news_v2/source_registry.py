@@ -20,7 +20,7 @@ def load_source_specs() -> tuple[SourceSpec,...]:
     urls = (
       ('interfax','https://www.interfax.ru/rss','rss'),
       ('tass','https://tass.ru/rss/v2.xml','rss'),
-      ('kommersant','https://www.kommersant.ru/rss/main.xml','rss'),
+      ('kommersant','https://t.me/s/kommersant','public_telegram'),
       ('rbc','https://t.me/s/rbc_news','public_telegram'),
       ('ria','https://ria.ru/export/rss2/archive/index.xml','rss'),
       ('izvestia','https://iz.ru/xml/rss/all.xml','rss'),
