@@ -92,6 +92,19 @@ class ResolvedAlertTests(unittest.TestCase):
         self.assertFalse(result[1].include)
         self.assertIn('resolved_warning',result[0].reason_codes)
 
+    def test_unverified_or_rejected_clearance_cannot_hide_active_warning(self):
+        from dragon_news_v2.editor import suppress_resolved_alerts,EditorialDecision
+        warning=EventGroup('w','',('a',),'В Липецкой области объявлена угроза БПЛА',
+                           'Липецк и Липецкая область',NOW-timedelta(hours=3),'')
+        doubtful=EventGroup('c','',('b',),'В Липецкой области объявлен отбой угрозы БПЛА',
+                            'Липецк и Липецкая область',NOW-timedelta(hours=1),'')
+        ds=[EditorialDecision('w',True,'Липецк и Липецкая область',10,'single_attributed',(),'v2'),
+            EditorialDecision('c',False,'Липецк и Липецкая область',0,'insufficient',
+                              ('insufficient_evidence',),'v2')]
+        result=suppress_resolved_alerts([warning,doubtful],ds)
+        self.assertTrue(result[0].include)
+        self.assertFalse(result[1].include)
+
     def test_later_all_clear_different_region_keeps_lipetsk_warning(self):
         from dragon_news_v2.editor import suppress_resolved_alerts,EditorialDecision
         warning=EventGroup('w','',('a',),'В Липецкой области объявлена угроза БПЛА',
