@@ -150,7 +150,9 @@ def match_articles(left: Article,right: Article) -> MatchResult:
         TECH_LEVY.search(lhs) and TECH_LEVY.search(rhs)
         and ELECTRONICS.search(lhs) and ELECTRONICS.search(rhs)
     )
-    if same_levy and a == b and ac == bc:
+    if same_levy and a == b:
+        # "Установил" and "утвердил" can describe the same decision;
+        # explicit contradictory actions have already been excluded above.
         return MatchResult('same',('same_technology_levy_subject',))
     a_tokens,b_tokens=subject_tokens(left),subject_tokens(right)
     shared=a_tokens & b_tokens
