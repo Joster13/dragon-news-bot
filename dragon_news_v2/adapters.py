@@ -73,10 +73,32 @@ def make_article(source: SourceSpec, url: str, title: str, desc: str,
 
 
 TELEGRAM_FOOTER = re.compile(
-    r'^(?:подписаться(?:\s+на\s+(?:канал|нас))?|написать\s+нам|'
-    r'читать\s+далее|читайте\s+нас|'
-    r'перейти\s+в\s+канал|наш\s+канал|ссылка\s+на\s+канал)'
-    r'(?:\s*[.!👉➡]*)?
+    r'^(?:подписаться|написать\s+нам|читать\s+далее|читайте\s+нас|'
+    r'перейти\s+в\s+канал|наш\s+канал)'
+    r'(?:\s+на\s+канал)?\s*[.!]*$', re.I
+)
+
+
+def public_message_text(node) -> str:
+    """Remove terminal navigation lines without changing the substantive report."""
+    lines=[line.strip() for line in node.get_text('\n',strip=True).splitlines()]
+    while lines and (not lines[-1] or TELEGRAM_FOOTER.fullmatch(lines[-1])):
+        lines.pop()
+    return clean_text(' '.join(lines),900)
+
+
+def public_message_title(content: str, max_chars: int=210) -> str:
+    """Prefer intact first sentence, then a word-boundary ellipsis."""
+    if len(content)<=max_chars:
+        return content
+    sentence=re.match(r'^.{30,200}?[.!?](?=\s|$)',content)
+    if sentence:
+        return sentence.group(0)
+    stem=content[:max_chars-1].rsplit(' ',1)[0].rstrip(' ,:;–—')
+    return (stem or content[:max_chars-1])+'…'
+
+
+def parse_feed(source: SourceSpec, payload: bytes, fetched_at: datetime) -> list[Article]:
     if fetched_at.tzinfo is None:
         raise ValueError('fetched_at must be timezone-aware')
     if len(payload)>source.max_bytes:
