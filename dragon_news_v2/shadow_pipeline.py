@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from .builder import build_digest
-from .editor import RULES_VERSION, evaluate_event, rank_events
+from .editor import RULES_VERSION, evaluate_event, rank_events, suppress_resolved_alerts
 from .evidence import assess_evidence
 from .legacy_bridge import render_v2_digest
 from .matcher import group_articles
@@ -148,6 +148,7 @@ def build_shadow_digest(db: sqlite3.Connection, cutoff_at: datetime,
     # Unknown publication origin never counts as multiple independent reports.
     evidence = {g.event_key: assess_evidence(g, articles, {}) for g in grouped}
     decisions = [evaluate_event(g, evidence[g.event_key], cutoff) for g in grouped]
+    decisions = suppress_resolved_alerts(grouped, decisions)
     chosen = rank_events(decisions, max_items)
     snapshot = build_digest(cutoff.date(), chosen, groups, articles, cutoff)
     rich, plain = render_v2_digest(snapshot)
