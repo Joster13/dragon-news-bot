@@ -28,6 +28,17 @@ class EventGroup:
 
 BILL_ID = re.compile(r'(?<!\d)(?:№\s*)?(\d{5,}-\d{1,3})(?!\d)')
 CVE_ID = re.compile(r'\bCVE-\d{4}-\d{4,}\b', re.I)
+# Distinctive document-free event anchors. Deliberately narrow: these are
+# candidate matches only after the existing stage/action conflict checks.
+TECH_LEVY = re.compile(r'технологич[а-яё]*\s+сбор', re.I)
+ELECTRONICS = re.compile(r'электрон[а-яё]*', re.I)
+P2P_BAN = re.compile(r'\bp2p\b', re.I)
+CRYPTO = re.compile(r'криптовалют[а-яё]*|криптоактив[а-яё]*', re.I)
+BAN = re.compile(r'запрет[а-яё]*|запрещ[а-яё]*', re.I)
+DATE_IN_TEXT = re.compile(
+    r'\b([0-3]?\d)\s+(января|февраля|марта|апреля|мая|июня|июля|августа|'
+    r'сентября|октября|ноября|декабря)\s+(20\d{2})\b', re.I
+)
 STAGE_RULES = (
     ('reading1', r'\b(?:i|1|первом|первое|первого)\s+чтен'),
     ('reading2', r'\b(?:ii|2|втором|второе|второго)\s+чтен'),
@@ -124,6 +135,25 @@ def match_articles(left: Article,right: Article) -> MatchResult:
         if a==b and ac==bc:
             return MatchResult('same',('same_bill_stage_action',))
         return MatchResult('possible',('same_bill_unclear_action',))
+    # Keep same-announced-date P2P claims together, without asserting they are
+    # legally true. Changing the claimed effective date is a distinct update.
+    lhs, rhs = left.title.casefold(), right.title.casefold()
+    dates_l, dates_r = set(DATE_IN_TEXT.findall(lhs)), set(DATE_IN_TEXT.findall(rhs))
+    same_p2p = all(x.search(lhs) and x.search(rhs)
+                   for x in (P2P_BAN, CRYPTO, BAN))
+    if same_p2p and dates_l and dates_r:
+        if dates_l != dates_r:
+            return MatchResult('different',('conflicting_claimed_dates',))
+        if a == b and ac == bc:
+            return MatchResult('same',('same_p2p_claim_same_date',))
+    same_levy = (
+        TECH_LEVY.search(lhs) and TECH_LEVY.search(rhs)
+        and ELECTRONICS.search(lhs) and ELECTRONICS.search(rhs)
+    )
+    if same_levy and a == b:
+        # "Установил" and "утвердил" can describe the same decision;
+        # explicit contradictory actions have already been excluded above.
+        return MatchResult('same',('same_technology_levy_subject',))
     a_tokens,b_tokens=subject_tokens(left),subject_tokens(right)
     shared=a_tokens & b_tokens
     if min(len(a_tokens),len(b_tokens))<3 or len(shared)<3:

@@ -72,6 +72,32 @@ def make_article(source: SourceSpec, url: str, title: str, desc: str,
                    hashlib.sha256((title+'\0'+desc).encode()).hexdigest())
 
 
+TELEGRAM_FOOTER = re.compile(
+    r'^(?:подписаться|написать\s+нам|читать\s+далее|читайте\s+нас|'
+    r'перейти\s+в\s+канал|наш\s+канал)'
+    r'(?:\s+на\s+канал)?\s*[.!]*$', re.I
+)
+
+
+def public_message_text(node) -> str:
+    """Remove terminal navigation lines without changing the substantive report."""
+    lines=[line.strip() for line in node.get_text('\n',strip=True).splitlines()]
+    while lines and (not lines[-1] or TELEGRAM_FOOTER.fullmatch(lines[-1])):
+        lines.pop()
+    return clean_text(' '.join(lines),900)
+
+
+def public_message_title(content: str, max_chars: int=210) -> str:
+    """Prefer intact first sentence, then a word-boundary ellipsis."""
+    if len(content)<=max_chars:
+        return content
+    sentence=re.match(r'^.{30,200}?[.!?](?=\s|$)',content)
+    if sentence:
+        return sentence.group(0)
+    stem=content[:max_chars-1].rsplit(' ',1)[0].rstrip(' ,:;–—')
+    return (stem or content[:max_chars-1])+'…'
+
+
 def parse_feed(source: SourceSpec, payload: bytes, fetched_at: datetime) -> list[Article]:
     if fetched_at.tzinfo is None:
         raise ValueError('fetched_at must be timezone-aware')
@@ -98,14 +124,15 @@ def parse_feed(source: SourceSpec, payload: bytes, fetched_at: datetime) -> list
             if expected and identifier.split('/')[0].casefold()!=expected:
                 continue
             published=parse_date(t.get('datetime',''),atom=True)
-            content=clean_text(node.get_text(' ',strip=True),900)
+            content=public_message_text(node)
             if not content:
                 continue
             # Preserve existing established channels' behavior. Only newly
             # curated channels have topic hints and use the spam/noise gate.
             if source.topics and reject_public_post(content):
                 continue
-            result.append(make_article(source,'https://t.me/'+identifier,content[:210],content,published,fetched_at))
+            result.append(make_article(source,'https://t.me/'+identifier,
+                                       public_message_title(content),content,published,fetched_at))
         return result
     try:
         root=ET.fromstring(payload)
