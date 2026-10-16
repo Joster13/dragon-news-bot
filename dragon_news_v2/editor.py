@@ -10,7 +10,25 @@ from direct_news import category as classify_title
 from editorial import editorial_score
 from editorial_gate import is_publishable
 
-RULES_VERSION='v2.0.0-editorial-2'
+RULES_VERSION='v2.0.0-editorial-3'
+# Rule-based *risk flags*, not an automated legal fact-checking service.
+FICTION = re.compile(
+    r'\b(?:премьера\s+сериал[а-яё]*|сериал\s+об|сериал\s+о|'
+    r'художественн[а-яё]*\s+сериал|'
+    r'акт[её]р[а-яё]*\s+сериал[а-яё]*)\b', re.I
+)
+FUTURE_LAW = re.compile(
+    r'\b(?:запретят|будет\s+запрещен[а-яё]*|'
+    r'вступит\s+в\s+силу|начн[её]т\s+действовать)\b', re.I
+)
+FUTURE_EFFECTIVE_DATE = re.compile(
+    r'\bс\s+\d{1,2}\s+(?:января|февраля|марта|апреля|мая|июня|'
+    r'июля|августа|сентября|октября|ноября|декабря)\s+20\d{2}\b', re.I
+)
+LEGAL_SUBJECT = re.compile(
+    r'\b(?:закон[а-яё]*|запрет[а-яё]*|регулирован[а-яё]*|'
+    r'перевод[а-яё]*|криптовалют[а-яё]*|банковск[а-яё]*)\b', re.I
+)
 # Channel location is contextual metadata, not independent verification.
 LOCAL_CUE = re.compile(r'\b(?:улиц[а-я]*|маршрут[а-я]*|район[а-я]*|городск[а-я]*|'
                        r'мкр|микрорайон[а-я]*|школ[а-я]*|дорог[а-я]*|'
@@ -59,6 +77,13 @@ def evaluate_event(event: EventGroup, evidence: EvidenceAssessment,
         return reject('missing_publication_time')
     if not now-timedelta(days=1) <= event.published_at < now:
         return reject('outside_digest_window')
+    if FICTION.search(event.title):
+        return reject('entertainment_not_news')
+    if (evidence.status == 'single_attributed'
+        and FUTURE_LAW.search(event.title)
+        and FUTURE_EFFECTIVE_DATE.search(event.title)
+        and LEGAL_SUBJECT.search(event.title)):
+        return reject('future_legal_claim_unverified')
     topic=classify_title(event.title,event.excerpt)
     if (event.category_hint == 'Липецк и Липецкая область'
         and LOCAL_CUE.search(event.title)
