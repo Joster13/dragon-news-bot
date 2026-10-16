@@ -122,7 +122,6 @@ def suppress_resolved_alerts(events: list[EventGroup],
     alert status outside the articles already held in the shadow database.
     """
     by_key={d.event_key:d for d in decisions}
-    matched=set()
     for warning in events:
         name=warning.title
         if not (warning.published_at and LOCAL_REGION.search(name)
@@ -139,6 +138,10 @@ def suppress_resolved_alerts(events: list[EventGroup],
                 not LOCAL_REGION.search(cleared.title) or
                 not ALERT_CLEAR.search(cleared.title)):
                 continue
+            clearance=by_key.get(cleared.event_key)
+            if (not clearance or not clearance.include or
+                clearance.evidence_status in ('insufficient','disputed')):
+                continue
             elapsed=(cleared.published_at-warning.published_at).total_seconds()
             if not 0 < elapsed <= 12*3600:
                 continue
@@ -151,7 +154,6 @@ def suppress_resolved_alerts(events: list[EventGroup],
                         prior,include=False,score=0,
                         reason_codes=(reason,)+prior.reason_codes,
                     )
-                    matched.add(item.event_key)
             break
     return [by_key[d.event_key] for d in decisions]
 
