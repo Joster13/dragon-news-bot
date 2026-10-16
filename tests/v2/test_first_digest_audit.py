@@ -76,6 +76,33 @@ class EditorialTrustTests(unittest.TestCase):
         self.assertTrue(evaluate_event(g,SINGLE,NOW).include)
 
 
+class ResolvedAlertTests(unittest.TestCase):
+    def test_bpla_warning_and_later_all_clear_not_presented_as_active(self):
+        from dragon_news_v2.editor import suppress_resolved_alerts
+        warning=item('warn','lipetsktop1','В Липецкой области объявлена угроза БПЛА')
+        release=item('clear','gorod48','В Липецкой области объявлен отбой угрозы БПЛА')
+        warning_group=EventGroup('warning','',('warn',),warning.title,
+                                 'Липецк и Липецкая область',NOW-timedelta(hours=5),warning.excerpt)
+        clear_group=EventGroup('clear','',('clear',),release.title,
+                               'Липецк и Липецкая область',NOW-timedelta(hours=2),release.excerpt)
+        decisions=[evaluate_event(e,SINGLE,NOW) for e in (warning_group,clear_group)]
+        result=suppress_resolved_alerts([warning_group,clear_group],decisions)
+        self.assertEqual(len(result),2)
+        self.assertFalse(result[0].include)
+        self.assertFalse(result[1].include)
+        self.assertIn('resolved_warning',result[0].reason_codes)
+
+    def test_later_all_clear_different_region_keeps_lipetsk_warning(self):
+        from dragon_news_v2.editor import suppress_resolved_alerts,EditorialDecision
+        warning=EventGroup('w','',('a',),'В Липецкой области объявлена угроза БПЛА',
+                           'Липецк и Липецкая область',NOW-timedelta(hours=3),'')
+        elsewhere=EventGroup('c','',('b',),'В Воронежской области объявлен отбой угрозы БПЛА',
+                             'Россия — главное',NOW-timedelta(hours=1),'')
+        ds=[EditorialDecision('w',True,'Липецк и Липецкая область',10,'single_attributed',(),'v2'),
+            EditorialDecision('c',True,'Россия — главное',10,'single_attributed',(),'v2')]
+        self.assertTrue(suppress_resolved_alerts([warning,elsewhere],ds)[0].include)
+
+
 class TelegramTextCleanupTests(unittest.TestCase):
     def source(self):
         return SourceSpec('cbpub','https://t.me/s/Cbpub','public_telegram',('Россия — главное',))
